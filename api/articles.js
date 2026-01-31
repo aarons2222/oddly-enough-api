@@ -300,7 +300,7 @@ async function fetchRSS(feedUrl) {
           description: cleanText(description || ''),
           link: cleanedLink,
           pubDate: parseDate(pubDate),
-          thumbnail: thumbnail || null,
+          thumbnail: thumbnail ? thumbnail.replace(/&amp;/g, '&') : null,
         });
       }
     }
