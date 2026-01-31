@@ -10,11 +10,5 @@
       },
       "continue": true
     }
-  ],
-  "crons": [
-    {
-      "path": "/api/refresh",
-      "schedule": "*/30 * * * *"
-    }
   ]
 }

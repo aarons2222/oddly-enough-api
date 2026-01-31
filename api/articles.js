@@ -201,8 +201,10 @@ function extractAttr(xml, tag, attr) {
 }
 
 function cleanText(text) {
+  if (!text) return '';
   return text
     .replace(/<[^>]+>/g, '')
+    // Decode HTML entities
     .replace(/&amp;/g, '&')
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
@@ -212,6 +214,19 @@ function cleanText(text) {
     .replace(/&apos;/g, "'")
     .replace(/&#x27;/g, "'")
     .replace(/&nbsp;/g, ' ')
+    .replace(/&#32;/g, ' ')
+    .replace(/&#91;/g, '[')
+    .replace(/&#93;/g, ']')
+    // Smart quotes and other special chars
+    .replace(/[\u2018\u2019]/g, "'")  // curly single quotes
+    .replace(/[\u201C\u201D]/g, '"')  // curly double quotes
+    .replace(/\u2014/g, '—')  // em dash
+    .replace(/\u2013/g, '–')  // en dash
+    .replace(/\u2026/g, '...')  // ellipsis
+    // Decode numeric entities
+    .replace(/&#(\d+);/g, (_, num) => String.fromCharCode(parseInt(num, 10)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
+    // Clean up whitespace
     .replace(/\s+/g, ' ')
     .trim();
 }
@@ -296,15 +311,60 @@ async function fetchRSS(feedUrl) {
   }
 }
 
-async function fetchOgImage(url) {
+// Default images for sources without thumbnails
+const DEFAULT_IMAGES = {
+  'The Register': 'https://www.theregister.com/design_picker/621fa76b064a476dc713ebf25bbf16451c706c03/graphics/icons/reg_logo_og_image_1200x630.jpg',
+};
+
+// Vibrant color pairs for gradient placeholders
+const GRADIENT_COLORS = [
+  ['FF6B6B', '4ECDC4'], // coral to teal
+  ['A8E6CF', 'FFD93D'], // mint to yellow
+  ['6C5CE7', 'A29BFE'], // purple gradient
+  ['FD79A8', 'FDCB6E'], // pink to gold
+  ['00B894', '00CEC9'], // green to cyan
+  ['E17055', 'FDCB6E'], // orange to yellow
+  ['0984E3', '74B9FF'], // blue gradient
+  ['E84393', 'FD79A8'], // magenta to pink
+  ['00B5AD', '21D4FD'], // teal to sky
+  ['F8B500', 'FF6F61'], // gold to coral
+  ['7F00FF', 'E100FF'], // violet to magenta
+  ['11998E', '38EF7D'], // emerald gradient
+];
+
+// Generate a colorful placeholder based on article title hash
+function generatePlaceholder(title) {
+  // Simple hash from title
+  let hash = 0;
+  for (let i = 0; i < title.length; i++) {
+    hash = ((hash << 5) - hash) + title.charCodeAt(i);
+    hash = hash & hash;
+  }
+  const index = Math.abs(hash) % GRADIENT_COLORS.length;
+  const [color1, color2] = GRADIENT_COLORS[index];
+  
+  // Use placeholder.com gradient
+  return `https://placehold.co/800x600/${color1}/${color2}?text=`;
+}
+
+async function fetchOgImage(url, source) {
+  // Use source default if available
+  if (source && DEFAULT_IMAGES[source]) {
+    return DEFAULT_IMAGES[source];
+  }
+  
   try {
     const response = await fetch(url, {
-      headers: { 'User-Agent': 'OddlyEnough/1.0' },
+      headers: { 
+        'User-Agent': 'Mozilla/5.0 (compatible; OddlyEnough/1.0)',
+        'Accept': 'text/html',
+      },
       redirect: 'follow',
     });
     const html = await response.text();
     const match = html.match(/property="og:image"\s+content="([^"]+)"/i) ||
-                  html.match(/content="([^"]+)"\s+property="og:image"/i);
+                  html.match(/content="([^"]+)"\s+property="og:image"/i) ||
+                  html.match(/name="twitter:image"\s+content="([^"]+)"/i);
     return match ? match[1] : null;
   } catch {
     return null;
@@ -391,6 +451,21 @@ async function handler(req, res) {
         .replace(/&#x27;/g, "'")
         .replace(/\s+/g, ' ')
         .trim();
+      
+      // Clean up Reddit boilerplate (submitted by /u/... [link] [comments])
+      if (feed.source.startsWith('r/')) {
+        summary = summary
+          .replace(/submitted by\s+\/u\/\w+/gi, '')
+          .replace(/\[link\]/gi, '')
+          .replace(/\[comments\]/gi, '')
+          .replace(/&#32;/g, '')
+          .trim();
+        // If summary is now empty or just whitespace, leave it empty
+        if (!summary || summary.length < 10) {
+          summary = '';
+        }
+      }
+      
       summary = summary.slice(0, 200) + (summary.length > 200 ? '...' : '');
       
       // Detect special categories based on content
@@ -408,7 +483,7 @@ async function handler(req, res) {
         title: item.title,
         summary,
         url: item.link,
-        imageUrl,
+        imageUrl: imageUrl || generatePlaceholder(item.title),
         source: feed.source,
         category: articleCategory,
         publishedAt: item.pubDate,
@@ -457,10 +532,10 @@ async function handler(req, res) {
     }
   });
   
-  // Fetch og:image for articles without images (limit 5)
-  const needImages = articles.filter(a => !a.imageUrl).slice(0, 5);
+  // Fetch og:image for articles without images (limit 10)
+  const needImages = articles.filter(a => !a.imageUrl).slice(0, 10);
   await Promise.all(needImages.map(async (article) => {
-    const img = await fetchOgImage(article.url);
+    const img = await fetchOgImage(article.url, article.source);
     if (img) article.imageUrl = img;
   }));
   
