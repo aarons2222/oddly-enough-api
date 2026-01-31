@@ -562,11 +562,22 @@ async function handler(req, res) {
     if (img) article.imageUrl = img;
   }));
   
-  // Sort by date
-  articles.sort((a, b) => new Date(b.publishedAt) - new Date(a.publishedAt));
+  // Separate curated and RSS articles
+  const curatedIds = CURATED_ARTICLES.map(a => a.id);
+  const curated = articles.filter(a => curatedIds.includes(a.id));
+  const rss = articles.filter(a => !curatedIds.includes(a.id));
+  
+  // Sort RSS by date
+  rss.sort((a, b) => new Date(b.publishedAt) - new Date(a.publishedAt));
+  
+  // Mix: all curated + top RSS (curated first, then recent RSS)
+  const mixed = [...curated, ...rss.slice(0, 30 - curated.length)];
+  
+  // Shuffle slightly to mix curated into the feed
+  mixed.sort(() => Math.random() - 0.5);
   
   // Cache results
-  cachedArticles = articles.slice(0, 30);
+  cachedArticles = mixed;
   cacheTime = now;
   
   const filtered = category === 'all' 
