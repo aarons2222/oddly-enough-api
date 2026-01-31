@@ -429,8 +429,22 @@ async function handler(req, res) {
       ? items.slice(0, 5)
       : items.filter(item => isOddNews(item.title, item.description));
     
-    return filtered.map((item, i) => {
+    // Process items and fetch og:images for Reddit if needed
+    const articlePromises = filtered.map(async (item, i) => {
       let imageUrl = item.thumbnail;
+      
+      // For Reddit sources without thumbnail, fetch og:image from actual article
+      if (feed.source.startsWith('r/') && !imageUrl) {
+        try {
+          const ogImage = await fetchOgImage(item.link, null);
+          if (ogImage) {
+            imageUrl = ogImage;
+          }
+        } catch (e) {
+          // Failed to fetch, will use placeholder
+        }
+      }
+      
       // Fix BBC image URLs
       if (feed.source.includes('BBC') && imageUrl) {
         imageUrl = fixBbcImage(imageUrl);
@@ -489,6 +503,9 @@ async function handler(req, res) {
         publishedAt: item.pubDate,
       };
     });
+    
+    // Wait for all article og:image fetches to complete
+    return Promise.all(articlePromises);
   });
   
   const feedResults = await Promise.all(feedPromises);
