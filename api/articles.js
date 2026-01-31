@@ -433,15 +433,21 @@ async function handler(req, res) {
     const articlePromises = filtered.map(async (item, i) => {
       let imageUrl = item.thumbnail;
       
-      // For Reddit sources without thumbnail, fetch og:image from actual article
-      if (feed.source.startsWith('r/') && !imageUrl) {
-        try {
-          const ogImage = await fetchOgImage(item.link, null);
-          if (ogImage) {
-            imageUrl = ogImage;
+      // For sources without thumbnail, try to get an image
+      if (!imageUrl) {
+        // Check for source default image first
+        if (DEFAULT_IMAGES[feed.source]) {
+          imageUrl = DEFAULT_IMAGES[feed.source];
+        } else {
+          // Fetch og:image from actual article
+          try {
+            const ogImage = await fetchOgImage(item.link, null);
+            if (ogImage) {
+              imageUrl = ogImage;
+            }
+          } catch (e) {
+            // Failed to fetch, will use placeholder
           }
-        } catch (e) {
-          // Failed to fetch, will use placeholder
         }
       }
       
