@@ -44,7 +44,17 @@ function extractContent(html) {
     .replace(/<header[^>]*>[\s\S]*?<\/header>/gi, '')
     .replace(/<footer[^>]*>[\s\S]*?<\/footer>/gi, '')
     .replace(/<aside[^>]*>[\s\S]*?<\/aside>/gi, '')
-    .replace(/<!--[\s\S]*?-->/g, '');
+    .replace(/<!--[\s\S]*?-->/g, '')
+    // Remove byline/author elements
+    .replace(/<div[^>]*class="[^"]*byline[^"]*"[^>]*>[\s\S]*?<\/div>/gi, '')
+    .replace(/<div[^>]*class="[^"]*author[^"]*"[^>]*>[\s\S]*?<\/div>/gi, '')
+    .replace(/<span[^>]*class="[^"]*byline[^"]*"[^>]*>[\s\S]*?<\/span>/gi, '')
+    .replace(/<time[^>]*>[\s\S]*?<\/time>/gi, '')
+    // Remove figure captions
+    .replace(/<figcaption[^>]*>[\s\S]*?<\/figcaption>/gi, '')
+    // Remove image credit lines
+    .replace(/<div[^>]*class="[^"]*image-credit[^"]*"[^>]*>[\s\S]*?<\/div>/gi, '')
+    .replace(/<span[^>]*class="[^"]*credit[^"]*"[^>]*>[\s\S]*?<\/span>/gi, '');
 
   // Try to find article body
   let articleContent = '';
@@ -92,15 +102,37 @@ function extractContent(html) {
       .replace(/\s+/g, ' ')
       .trim();
     
+    // Clean up bylines, timestamps, and metadata cruft
+    para = para
+      // Remove "Updated HH:MM, DD Mon YYYY" patterns
+      .replace(/Updated\s*\d{1,2}:\d{2},?\s*\d{1,2}\s+\w+\s+\d{4}/gi, '')
+      // Remove "HH:MM, DD Mon YYYY" at start
+      .replace(/^\d{1,2}:\d{2},?\s*\d{1,2}\s+\w+\s+\d{4}/i, '')
+      // Remove "View X Images" 
+      .replace(/View\s*\d+\s*Images?/gi, '')
+      // Remove "(Image: SOURCE)" or "(Image: UGC)" etc
+      .replace(/\(Image:\s*[^)]+\)/gi, '')
+      // Remove bylines like "By John Smith" or "NewsJohn Smith"
+      .replace(/^(News)?[A-Z][a-z]+\s+[A-Z][a-z]+(\s+[A-Z][a-z]+)?\s*(News\s*)?(Reporter|Editor|Correspondent)?/i, '')
+      // Remove "DD Mon YYYYName Name" pattern (no space between date and name)
+      .replace(/\d{1,2}\s+\w+\s+\d{4}[A-Z][a-z]+\s+[A-Z][a-z]+/g, '')
+      // Clean up any resulting double spaces
+      .replace(/\s+/g, ' ')
+      .trim();
+    
     // Filter out short/junk paragraphs
     const junkPatterns = [
       'Share', 'Cookie', 'Subscribe', 'Newsletter', 'Follow BBC', 'Follow us',
       'Listen to', 'Watch on', 'Download the', 'Get the app', 'Sign up',
-      'Related internet', 'External link', 'Send your story', 'highlights from'
+      'Related internet', 'External link', 'Send your story', 'highlights from',
+      'Read more:', 'See also:', 'MORE:', 'ALSO READ'
     ];
     const isJunk = junkPatterns.some(p => para.includes(p));
     
-    if (para.length > 50 && !isJunk) {
+    // Also skip if it looks like just metadata (short + has timestamp patterns)
+    const looksLikeMetadata = para.length < 100 && /\d{1,2}:\d{2}|\d{4}/.test(para);
+    
+    if (para.length > 50 && !isJunk && !looksLikeMetadata) {
       paragraphs.push(para);
     }
   }
