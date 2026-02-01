@@ -2,13 +2,19 @@
 // POST /api/track
 // Body: { articleId, event: 'view' | 'reaction', reaction?: '🤯' | '😂' | '🤮' }
 
-const { Redis } = require('@upstash/redis');
+const Redis = require('ioredis');
 
-// Initialize Redis (uses UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN env vars)
-const redis = new Redis({
-  url: process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL,
-  token: process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN,
-});
+// Lazy connection - reuse across invocations
+let redis;
+function getRedis() {
+  if (!redis) {
+    redis = new Redis(process.env.REDIS_URL, {
+      maxRetriesPerRequest: 3,
+      lazyConnect: true,
+    });
+  }
+  return redis;
+}
 
 async function handler(req, res) {
   // CORS
@@ -31,16 +37,15 @@ async function handler(req, res) {
       return res.status(400).json({ error: 'Missing articleId or event' });
     }
     
+    const client = getRedis();
     const key = `stats:${articleId}`;
     
     // Get current stats or initialize
-    let stats = await redis.get(key);
-    if (!stats) {
-      stats = {
-        views: 0,
-        reactions: { '🤯': 0, '😂': 0, '🤮': 0 },
-      };
-    }
+    const raw = await client.get(key);
+    let stats = raw ? JSON.parse(raw) : {
+      views: 0,
+      reactions: { '🤯': 0, '😂': 0, '🤮': 0 },
+    };
     
     if (event === 'view') {
       stats.views++;
@@ -53,7 +58,7 @@ async function handler(req, res) {
     stats.lastUpdated = new Date().toISOString();
     
     // Save to Redis
-    await redis.set(key, stats);
+    await client.set(key, JSON.stringify(stats));
     
     return res.status(200).json({ 
       success: true, 

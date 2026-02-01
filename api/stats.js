@@ -1,13 +1,19 @@
 // Get stats for articles
 // GET /api/stats?ids=id1,id2,id3
 
-const { Redis } = require('@upstash/redis');
+const Redis = require('ioredis');
 
-// Initialize Redis
-const redis = new Redis({
-  url: process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL,
-  token: process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN,
-});
+// Lazy connection - reuse across invocations
+let redis;
+function getRedis() {
+  if (!redis) {
+    redis = new Redis(process.env.REDIS_URL, {
+      maxRetriesPerRequest: 3,
+      lazyConnect: true,
+    });
+  }
+  return redis;
+}
 
 async function handler(req, res) {
   // CORS
@@ -30,15 +36,17 @@ async function handler(req, res) {
       return res.status(400).json({ error: 'Missing ids parameter' });
     }
     
+    const client = getRedis();
     const articleIds = ids.split(',').map(id => id.trim()).filter(Boolean);
     
     // Fetch all stats in parallel
     const keys = articleIds.map(id => `stats:${id}`);
-    const values = await redis.mget(...keys);
+    const values = await client.mget(...keys);
     
     const result = {};
     articleIds.forEach((id, i) => {
-      result[id] = values[i] || {
+      const raw = values[i];
+      result[id] = raw ? JSON.parse(raw) : {
         views: 0,
         reactions: { '🤯': 0, '😂': 0, '🤮': 0 },
       };
