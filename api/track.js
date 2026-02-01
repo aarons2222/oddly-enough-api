@@ -2,9 +2,13 @@
 // POST /api/track
 // Body: { articleId, event: 'view' | 'reaction', reaction?: '🤯' | '😂' | '🤮' }
 
-// In-memory storage (fallback - resets on cold start)
-// For production, connect Vercel KV: https://vercel.com/docs/storage/vercel-kv
-const stats = global._oddlyStats || (global._oddlyStats = {});
+const { Redis } = require('@upstash/redis');
+
+// Initialize Redis (uses UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN env vars)
+const redis = new Redis({
+  url: process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL,
+  token: process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN,
+});
 
 async function handler(req, res) {
   // CORS
@@ -27,36 +31,38 @@ async function handler(req, res) {
       return res.status(400).json({ error: 'Missing articleId or event' });
     }
     
-    // Initialize article stats if needed
-    if (!stats[articleId]) {
-      stats[articleId] = {
+    const key = `stats:${articleId}`;
+    
+    // Get current stats or initialize
+    let stats = await redis.get(key);
+    if (!stats) {
+      stats = {
         views: 0,
         reactions: { '🤯': 0, '😂': 0, '🤮': 0 },
-        lastUpdated: null,
       };
     }
     
-    const articleStats = stats[articleId];
-    
     if (event === 'view') {
-      articleStats.views++;
+      stats.views++;
     } else if (event === 'reaction' && reaction) {
-      // Validate reaction emoji
       if (['🤯', '😂', '🤮'].includes(reaction)) {
-        articleStats.reactions[reaction]++;
+        stats.reactions[reaction]++;
       }
     }
     
-    articleStats.lastUpdated = new Date().toISOString();
+    stats.lastUpdated = new Date().toISOString();
+    
+    // Save to Redis
+    await redis.set(key, stats);
     
     return res.status(200).json({ 
       success: true, 
-      stats: articleStats,
+      stats,
     });
     
   } catch (error) {
     console.error('Track error:', error);
-    return res.status(500).json({ error: 'Internal server error' });
+    return res.status(500).json({ error: 'Internal server error', details: error.message });
   }
 }
 
