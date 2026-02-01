@@ -188,6 +188,18 @@ function isOddNews(title, description) {
   return ODD_PATTERNS.some(p => p.test(text));
 }
 
+// Filter out non-English content
+function isEnglish(title) {
+  if (!title) return false;
+  // Reject if contains non-Latin scripts (Cyrillic, Chinese, Arabic, etc.)
+  if (/[\u0400-\u04FF\u4E00-\u9FFF\u0600-\u06FF\u3040-\u30FF\uAC00-\uD7AF]/.test(title)) return false;
+  // Reject common non-English patterns
+  if (/\b(der|die|das|und|für|avec|dans|pour|está|tiene|sobre)\b/i.test(title)) return false;
+  // Must have some English articles/words
+  if (!/\b(the|a|an|is|are|was|were|has|have|in|on|at|to|for|of|and|or|but|with)\b/i.test(title)) return false;
+  return true;
+}
+
 function extractTag(xml, tag) {
   const regex = new RegExp(`<${tag}[^>]*><!\\[CDATA\\[([\\s\\S]*?)\\]\\]><\\/${tag}>|<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, 'i');
   const match = xml.match(regex);
@@ -425,9 +437,11 @@ async function handler(req, res) {
   // Fetch from RSS feeds
   const feedPromises = RSS_FEEDS.map(async (feed) => {
     const items = await fetchRSS(feed.url);
-    const filtered = feed.alwaysOdd 
-      ? items.slice(0, 5)
-      : items.filter(item => isOddNews(item.title, item.description));
+    // Filter for odd news and English only
+    const filtered = (feed.alwaysOdd 
+      ? items.slice(0, 8)
+      : items.filter(item => isOddNews(item.title, item.description))
+    ).filter(item => isEnglish(item.title)).slice(0, 5);
     
     // Process items and fetch og:images for Reddit if needed
     const articlePromises = filtered.map(async (item, i) => {
