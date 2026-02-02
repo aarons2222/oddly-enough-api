@@ -1,6 +1,50 @@
 // Oddly Enough API - /api/articles
 // Fetches and filters odd/weird news from RSS feeds
 
+const GROQ_API_KEY = process.env.GROQ_API_KEY;
+
+// Enhance summary with Groq LLM
+async function enhanceSummary(title, summary, source) {
+  if (!GROQ_API_KEY || !summary || summary.length < 20) return summary;
+  
+  try {
+    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${GROQ_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'llama-3.1-8b-instant',
+        messages: [{
+          role: 'user',
+          content: `Rewrite this news summary to be punchy and engaging for a "weird news" app. Keep it under 150 characters. Don't use clickbait phrases like "you won't believe". Just make it interesting and clear.
+
+Title: ${title}
+Summary: ${summary}
+
+Rewritten summary:`
+        }],
+        max_tokens: 100,
+        temperature: 0.7,
+      }),
+    });
+    
+    if (!response.ok) return summary;
+    
+    const data = await response.json();
+    const enhanced = data.choices?.[0]?.message?.content?.trim();
+    
+    // Return enhanced if valid, otherwise original
+    if (enhanced && enhanced.length > 10 && enhanced.length < 200) {
+      return enhanced;
+    }
+    return summary;
+  } catch (e) {
+    return summary;
+  }
+}
+
 const RSS_FEEDS = [
   // Reddit weird news (the best source!) - use old.reddit.com to avoid 403
   // These subreddits link to real news articles, not just reddit images
@@ -630,10 +674,13 @@ async function handler(req, res) {
         .replace(/\s*[-–]\s*[A-Z][a-z]+(\s+[A-Z][a-z]+)*\s*$/, '') // Remove "- Source Name" at end
         .trim();
       
+      // Enhance summary with Groq LLM (if available)
+      const enhancedSummary = await enhanceSummary(cleanTitle, summary, feed.source);
+      
       return {
         id: `${feed.source.replace(/\s/g, '-')}-${now}-${i}`,
         title: cleanTitle,
-        summary,
+        summary: enhancedSummary,
         url: item.link,
         imageUrl,
         source: feed.source,
