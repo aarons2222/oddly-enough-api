@@ -328,12 +328,27 @@ const DEFAULT_IMAGES = {
   'The Register': 'https://www.theregister.com/design_picker/621fa76b064a476dc713ebf25bbf16451c706c03/graphics/icons/reg_logo_og_image_1200x630.jpg',
 };
 
-// Generate a placeholder image URL for articles without images
+// Weird placeholder messages
+const WEIRD_PLACEHOLDERS = [
+  '👽+Image+Abducted',
+  '🔮+No+Image+Found',
+  '🛸+UFO+Took+This',
+  '👀+Nothing+To+See',
+  '🌀+Image+Lost+In+Void',
+  '🎭+Mystery+Image',
+  '🦑+Kraken+Ate+It',
+  '👻+Ghost+Image',
+  '🌈+Imagine+Something',
+  '🐙+Tentacles+Only',
+  '💀+RIP+Image',
+  '🤖+Beep+Boop+No+Pic',
+];
+
+// Generate a funky placeholder image URL for articles without images
 function getPlaceholderImage(title, source) {
-  // Use a solid color placeholder from dummyimage.com (more reliable)
   const colors = GRADIENT_COLORS[Math.abs(hashCode(title)) % GRADIENT_COLORS.length];
-  // Use dummyimage which is more reliable
-  return `https://dummyimage.com/800x450/${colors[0]}/ffffff.png&text=Oddly+Enough`;
+  const weirdText = WEIRD_PLACEHOLDERS[Math.abs(hashCode(title)) % WEIRD_PLACEHOLDERS.length];
+  return `https://dummyimage.com/800x450/${colors[0]}/${colors[1]}.png&text=${weirdText}`;
 }
 
 function hashCode(str) {
