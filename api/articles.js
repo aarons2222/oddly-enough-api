@@ -11,8 +11,11 @@ const RSS_FEEDS = [
   // Dedicated weird/odd news feeds (always include - no filtering)
   { url: 'https://rss.upi.com/news/odd_news.rss', category: 'viral', source: 'UPI Odd', alwaysOdd: true },
   { url: 'https://www.theregister.com/offbeat/headlines.atom', category: 'tech', source: 'The Register', alwaysOdd: true },
-  { url: 'http://www.mirror.co.uk/news/weird-news/?service=rss', category: 'viral', source: 'Mirror Weird', alwaysOdd: true },
-  { url: 'http://www.dailystar.co.uk/news/weird-news/?service=rss', category: 'viral', source: 'Daily Star', alwaysOdd: true },
+  { url: 'https://www.mirror.co.uk/news/weird-news/rss.xml', category: 'viral', source: 'Mirror Weird', alwaysOdd: true },
+  { url: 'https://www.dailystar.co.uk/news/weird-news/rss.xml', category: 'viral', source: 'Daily Star', alwaysOdd: true },
+  { url: 'https://feeds.skynews.com/feeds/rss/strange.xml', category: 'viral', source: 'Sky News', alwaysOdd: true },
+  { url: 'https://www.independent.co.uk/news/weird-news/rss', category: 'viral', source: 'Independent', alwaysOdd: true },
+  { url: 'https://www.sciencedaily.com/rss/strange_offbeat.xml', category: 'tech', source: 'ScienceDaily', alwaysOdd: true },
   
   // General news feeds (filtered for oddness)
   { url: 'https://feeds.bbci.co.uk/news/england/rss.xml', category: 'viral', source: 'BBC' },
@@ -515,9 +518,9 @@ async function handler(req, res) {
     const items = await fetchRSS(feed.url);
     // Filter for odd news and English only
     const filtered = (feed.alwaysOdd 
-      ? items.slice(0, 8)
+      ? items.slice(0, 12)
       : items.filter(item => isOddNews(item.title, item.description))
-    ).filter(item => isEnglish(item.title)).slice(0, 5);
+    ).filter(item => isEnglish(item.title)).slice(0, 8);
     
     // Process items and fetch og:images for Reddit if needed
     const articlePromises = filtered.map(async (item, i) => {
@@ -549,7 +552,7 @@ async function handler(req, res) {
       if ((feed.source.includes('Mirror') || feed.source.includes('Daily Star')) && imageUrl) {
         imageUrl = fixMirrorImage(imageUrl);
       }
-      // Strip HTML from summary
+      // Strip HTML and clean summary
       let summary = item.description
         .replace(/<[^>]+>/g, '') // Remove HTML tags
         .replace(/&nbsp;/g, ' ')
@@ -559,6 +562,23 @@ async function handler(req, res) {
         .replace(/&quot;/g, '"')
         .replace(/&#39;/g, "'")
         .replace(/&#x27;/g, "'")
+        .replace(/\s+/g, ' ')
+        // Remove common cruft
+        .replace(/^(Image|Photo|Video|Picture)\s*:/i, '')
+        .replace(/\(Image:\s*[^)]+\)/gi, '')
+        .replace(/\(Photo:\s*[^)]+\)/gi, '')
+        .replace(/Credit:\s*[^\s]+/gi, '')
+        .replace(/Getty Images?/gi, '')
+        .replace(/PA Media/gi, '')
+        .replace(/Reuters/gi, '')
+        .replace(/Read more:.*$/i, '')
+        .replace(/Click here.*$/i, '')
+        .replace(/Continue reading.*$/i, '')
+        .replace(/\[.*?\]/g, '') // Remove [anything in brackets]
+        .replace(/Updated\s+\d+[:\d]*\s*(am|pm)?/gi, '')
+        .replace(/Published\s+\d+[:\d]*\s*(am|pm)?/gi, '')
+        .replace(/\d{1,2}:\d{2}\s*(am|pm)/gi, '') // Remove times
+        .replace(/^\s*[-–—]\s*/, '') // Remove leading dashes
         .replace(/\s+/g, ' ')
         .trim();
       
@@ -603,9 +623,16 @@ async function handler(req, res) {
         return null;
       }
       
+      // Clean title - remove source suffixes
+      let cleanTitle = item.title
+        .replace(/\s*[-–|]\s*(BBC News?|Mirror|Daily Star|UPI|The Register|Sky News|Independent|NDTV).*$/i, '')
+        .replace(/\s*\|\s*.*$/, '') // Remove anything after |
+        .replace(/\s*[-–]\s*[A-Z][a-z]+(\s+[A-Z][a-z]+)*\s*$/, '') // Remove "- Source Name" at end
+        .trim();
+      
       return {
         id: `${feed.source.replace(/\s/g, '-')}-${now}-${i}`,
-        title: item.title,
+        title: cleanTitle,
         summary,
         url: item.link,
         imageUrl,
