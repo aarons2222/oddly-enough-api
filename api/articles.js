@@ -401,6 +401,39 @@ async function fetchOgImage(url, source) {
   }
 }
 
+// Fetch og:description from article URL
+async function fetchOgDescription(url) {
+  try {
+    const response = await fetch(url, {
+      headers: { 
+        'User-Agent': 'Mozilla/5.0 (compatible; OddlyEnough/1.0)',
+        'Accept': 'text/html',
+      },
+      redirect: 'follow',
+      signal: AbortSignal.timeout(5000), // 5 second timeout
+    });
+    const html = await response.text();
+    const match = html.match(/property="og:description"\s+content="([^"]+)"/i) ||
+                  html.match(/content="([^"]+)"\s+property="og:description"/i) ||
+                  html.match(/name="description"\s+content="([^"]+)"/i) ||
+                  html.match(/content="([^"]+)"\s+name="description"/i);
+    if (match && match[1]) {
+      // Clean and truncate
+      let desc = match[1]
+        .replace(/&amp;/g, '&')
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'")
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .trim();
+      return desc.slice(0, 200) + (desc.length > 200 ? '...' : '');
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 // Validate image URL exists (HEAD request)
 async function validateImage(url) {
   if (!url) return false;
@@ -517,9 +550,14 @@ async function handler(req, res) {
           .replace(/\[comments\]/gi, '')
           .replace(/&#32;/g, '')
           .trim();
-        // If summary is now empty or just whitespace, leave it empty
+        // If summary is now empty, try to fetch og:description from the article
         if (!summary || summary.length < 10) {
-          summary = '';
+          try {
+            const ogDesc = await fetchOgDescription(item.link);
+            summary = ogDesc || '';
+          } catch {
+            summary = '';
+          }
         }
       }
       
