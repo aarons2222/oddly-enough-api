@@ -401,17 +401,21 @@ async function fetchOgImage(url, source) {
   }
 }
 
-// Fetch og:description from article URL
+// Fetch og:description from article URL with timeout
 async function fetchOgDescription(url) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 3000);
+  
   try {
     const response = await fetch(url, {
       headers: { 
-        'User-Agent': 'Mozilla/5.0 (compatible; OddlyEnough/1.0)',
-        'Accept': 'text/html',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept': 'text/html,application/xhtml+xml',
       },
       redirect: 'follow',
-      signal: AbortSignal.timeout(5000), // 5 second timeout
+      signal: controller.signal,
     });
+    clearTimeout(timeout);
     const html = await response.text();
     const match = html.match(/property="og:description"\s+content="([^"]+)"/i) ||
                   html.match(/content="([^"]+)"\s+property="og:description"/i) ||
@@ -430,8 +434,15 @@ async function fetchOgDescription(url) {
     }
     return null;
   } catch {
+    clearTimeout(timeout);
     return null;
   }
+}
+
+// Generate a fallback summary from title
+function generateFallbackSummary(title, source) {
+  // Just indicate where the story is from
+  return `Read the full story from ${source.replace('r/', '')}...`;
 }
 
 // Validate image URL exists (HEAD request)
@@ -554,9 +565,9 @@ async function handler(req, res) {
         if (!summary || summary.length < 10) {
           try {
             const ogDesc = await fetchOgDescription(item.link);
-            summary = ogDesc || '';
+            summary = ogDesc || generateFallbackSummary(item.title, feed.source);
           } catch {
-            summary = '';
+            summary = generateFallbackSummary(item.title, feed.source);
           }
         }
       }
