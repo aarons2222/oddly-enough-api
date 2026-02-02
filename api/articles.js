@@ -603,20 +603,26 @@ async function handler(req, res) {
         articleCategory = 'british';
       }
       
+      // Skip articles without images
+      if (!imageUrl) {
+        return null;
+      }
+      
       return {
         id: `${feed.source.replace(/\s/g, '-')}-${now}-${i}`,
         title: item.title,
         summary,
         url: item.link,
-        imageUrl: imageUrl || generatePlaceholder(item.title),
+        imageUrl,
         source: feed.source,
         category: articleCategory,
         publishedAt: item.pubDate,
       };
     });
     
-    // Wait for all article og:image fetches to complete
-    return Promise.all(articlePromises);
+    // Wait for all article og:image fetches to complete, filter out nulls
+    const results = await Promise.all(articlePromises);
+    return results.filter(a => a !== null);
   });
   
   const feedResults = await Promise.all(feedPromises);
