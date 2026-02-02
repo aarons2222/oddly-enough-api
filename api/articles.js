@@ -561,13 +561,18 @@ async function handler(req, res) {
           .replace(/\[comments\]/gi, '')
           .replace(/&#32;/g, '')
           .trim();
-        // If summary is now empty, try to fetch og:description from the article
-        if (!summary || summary.length < 10) {
-          try {
-            const ogDesc = await fetchOgDescription(item.link);
-            summary = ogDesc || generateFallbackSummary(item.title, feed.source);
-          } catch {
-            summary = generateFallbackSummary(item.title, feed.source);
+        // Reddit posts rarely have useful summaries - use fallback
+        if (!summary || summary.length < 20) {
+          // Generate a contextual fallback based on subreddit
+          const subreddit = feed.source.replace('r/', '');
+          if (subreddit === 'FloridaMan') {
+            summary = 'Another wild Florida Man story. Tap to read the full article...';
+          } else if (subreddit === 'nottheonion') {
+            summary = 'A real headline that sounds like satire. Tap to read more...';
+          } else if (subreddit === 'offbeat') {
+            summary = 'An unusual story from around the web. Tap to read the full article...';
+          } else {
+            summary = `From r/${subreddit}. Tap to read the full story...`;
           }
         }
       }
