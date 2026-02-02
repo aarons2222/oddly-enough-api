@@ -330,11 +330,10 @@ const DEFAULT_IMAGES = {
 
 // Generate a placeholder image URL for articles without images
 function getPlaceholderImage(title, source) {
-  // Use a gradient placeholder with text
+  // Use a solid color placeholder from dummyimage.com (more reliable)
   const colors = GRADIENT_COLORS[Math.abs(hashCode(title)) % GRADIENT_COLORS.length];
-  const emoji = source.startsWith('r/') ? '📰' : '🔮';
-  // Use placehold.co for a simple colored placeholder
-  return `https://placehold.co/800x450/${colors[0]}/${colors[1]}?text=${encodeURIComponent(emoji)}`;
+  // Use dummyimage which is more reliable
+  return `https://dummyimage.com/800x450/${colors[0]}/ffffff.png&text=Oddly+Enough`;
 }
 
 function hashCode(str) {
