@@ -541,11 +541,6 @@ async function handler(req, res) {
         }
       }
       
-      // If still no image, use a colorful placeholder
-      if (!imageUrl) {
-        imageUrl = getPlaceholderImage(item.title, feed.source);
-      }
-      
       // Fix BBC image URLs
       if (feed.source.includes('BBC') && imageUrl) {
         imageUrl = fixBbcImage(imageUrl);
