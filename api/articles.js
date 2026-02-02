@@ -328,6 +328,24 @@ const DEFAULT_IMAGES = {
   'The Register': 'https://www.theregister.com/design_picker/621fa76b064a476dc713ebf25bbf16451c706c03/graphics/icons/reg_logo_og_image_1200x630.jpg',
 };
 
+// Generate a placeholder image URL for articles without images
+function getPlaceholderImage(title, source) {
+  // Use a gradient placeholder with text
+  const colors = GRADIENT_COLORS[Math.abs(hashCode(title)) % GRADIENT_COLORS.length];
+  const emoji = source.startsWith('r/') ? '📰' : '🔮';
+  // Use placehold.co for a simple colored placeholder
+  return `https://placehold.co/800x450/${colors[0]}/${colors[1]}?text=${encodeURIComponent(emoji)}`;
+}
+
+function hashCode(str) {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = ((hash << 5) - hash) + str.charCodeAt(i);
+    hash |= 0;
+  }
+  return hash;
+}
+
 // Vibrant color pairs for gradient placeholders
 const GRADIENT_COLORS = [
   ['FF6B6B', '4ECDC4'], // coral to teal
@@ -463,6 +481,11 @@ async function handler(req, res) {
             // Failed to fetch, will use placeholder
           }
         }
+      }
+      
+      // If still no image, use a colorful placeholder
+      if (!imageUrl) {
+        imageUrl = getPlaceholderImage(item.title, feed.source);
       }
       
       // Fix BBC image URLs
