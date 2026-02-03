@@ -3,46 +3,73 @@
 
 const GROQ_API_KEY = process.env.GROQ_API_KEY;
 
-// Enhance summary with Groq LLM
-async function enhanceSummary(title, summary, source) {
-  if (!GROQ_API_KEY || !summary || summary.length < 20) return summary;
+// Simple delay helper
+const delay = ms => new Promise(r => setTimeout(r, ms));
+
+// Enhance summary with Groq LLM - ALWAYS runs for consistency
+async function enhanceSummary(title, summary, source, retries = 2) {
+  if (!GROQ_API_KEY) return summary || `${title.slice(0, 100)}...`;
   
-  try {
-    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${GROQ_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'llama-3.1-8b-instant',
-        messages: [{
-          role: 'user',
-          content: `Rewrite this news summary to be punchy and engaging for a "weird news" app. Keep it under 150 characters. Don't use clickbait phrases like "you won't believe". Just make it interesting and clear.
+  // Use title if summary is missing or is a generic placeholder
+  const genericPatterns = ['Tap to read', 'unusual story', 'wild Florida Man', 'sounds like satire', 'From r/'];
+  const isGeneric = !summary || summary.length < 15 || genericPatterns.some(p => summary.includes(p));
+  const inputText = isGeneric ? title : summary;
+  
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      if (attempt > 0) await delay(500 * attempt); // Backoff on retry
+      
+      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${GROQ_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'llama-3.1-8b-instant',
+          messages: [{
+            role: 'user',
+            content: `Write a punchy, engaging one-liner summary for this weird news story. Rules:
+- Max 120 characters
+- No quotes around the text  
+- No clickbait ("you won't believe", "shocking")
+- Be witty but clear
+- Start with the interesting part
 
 Title: ${title}
-Summary: ${summary}
+Context: ${inputText}
 
-Rewritten summary:`
-        }],
-        max_tokens: 100,
-        temperature: 0.7,
-      }),
-    });
-    
-    if (!response.ok) return summary;
-    
-    const data = await response.json();
-    const enhanced = data.choices?.[0]?.message?.content?.trim();
-    
-    // Return enhanced if valid, otherwise original
-    if (enhanced && enhanced.length > 10 && enhanced.length < 200) {
-      return enhanced;
+Summary:`
+          }],
+          max_tokens: 80,
+          temperature: 0.7,
+        }),
+      });
+      
+      if (response.status === 429) {
+        console.log('Groq rate limited, retrying...');
+        continue; // Retry on rate limit
+      }
+      
+      if (!response.ok) {
+        console.error('Groq API error:', response.status);
+        continue;
+      }
+      
+      const data = await response.json();
+      const enhanced = data.choices?.[0]?.message?.content?.trim();
+      
+      // Return enhanced if valid
+      if (enhanced && enhanced.length > 10 && enhanced.length < 180) {
+        return enhanced.replace(/^["'"]+|["'"]+$/g, '').trim();
+      }
+    } catch (e) {
+      console.error('Groq enhancement failed:', e.message);
     }
-    return summary;
-  } catch (e) {
-    return summary;
   }
+  
+  // All retries failed - generate a simple summary from title
+  return `${title.slice(0, 100)}${title.length > 100 ? '...' : ''}`;
 }
 
 const RSS_FEEDS = [
@@ -554,8 +581,12 @@ async function handler(req, res) {
     return res.status(200).json({ articles: filtered, cached: true });
   }
   
-  // Start with curated articles
-  let articles = [...CURATED_ARTICLES];
+  // Start with curated articles - also enhance their summaries for consistency
+  const curatedPromises = CURATED_ARTICLES.map(async (article) => {
+    const enhancedSummary = await enhanceSummary(article.title, article.summary, article.source);
+    return { ...article, summary: enhancedSummary };
+  });
+  let articles = await Promise.all(curatedPromises);
   
   // Fetch from RSS feeds
   const feedPromises = RSS_FEEDS.map(async (feed) => {

@@ -1,13 +1,110 @@
 // Fetch and parse article content from source URL
+// Uses Groq LLM to clean and rewrite content for consistency
+// Caches rewritten content in Redis (7 days) to avoid repeated API calls
+
+const GROQ_API_KEY = process.env.GROQ_API_KEY;
+const Redis = require('ioredis');
+
+// Lazy Redis connection - reuse across invocations
+let redis;
+function getRedis() {
+  if (!redis) {
+    redis = new Redis(process.env.REDIS_URL, {
+      maxRetriesPerRequest: 3,
+      lazyConnect: true,
+    });
+  }
+  return redis;
+}
+
+const CACHE_TTL = 86400 * 7; // 7 days
+
+// Rewrite article content with Groq for clean, consistent formatting
+async function rewriteContent(rawContent, title) {
+  if (!GROQ_API_KEY || !rawContent || rawContent.length < 100) {
+    return rawContent;
+  }
+
+  try {
+    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${GROQ_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'llama-3.1-8b-instant',
+        messages: [{
+          role: 'user',
+          content: `Rewrite this news article to be clean, well-formatted, and engaging. Rules:
+- Fix any broken sentences (missing words at start, orphaned punctuation)
+- Remove any metadata cruft (bylines, timestamps, image credits)
+- Keep the same facts and information
+- Use clear paragraph breaks
+- Make it flow naturally
+- Keep similar length to original
+- Start sentences properly (no orphaned "'s" or ",")
+- Do NOT add any commentary or introduction
+
+Article title: ${title || 'News Article'}
+
+Raw content:
+${rawContent.slice(0, 3000)}
+
+Rewritten article:`
+        }],
+        max_tokens: 1500,
+        temperature: 0.3, // Lower temp for more consistent rewrites
+      }),
+    });
+
+    if (!response.ok) {
+      console.error('Groq content rewrite failed:', response.status);
+      return rawContent;
+    }
+
+    const data = await response.json();
+    const rewritten = data.choices?.[0]?.message?.content?.trim();
+
+    if (rewritten && rewritten.length > 100) {
+      return rewritten;
+    }
+    return rawContent;
+  } catch (e) {
+    console.error('Groq rewrite error:', e.message);
+    return rawContent;
+  }
+}
 
 async function handler(req, res) {
-  const { url } = req.query;
+  // CORS
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+
+  const { url, title } = req.query;
   
   if (!url) {
     return res.status(400).json({ error: 'URL required' });
   }
 
+  const cacheKey = `content:${url}`;
+  
   try {
+    // Check cache first
+    const r = getRedis();
+    const cached = await r.get(cacheKey);
+    if (cached) {
+      return res.status(200).json({ 
+        content: cached,
+        url,
+        cached: true,
+      });
+    }
+
     const response = await fetch(url, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (compatible; OddlyEnough/1.0)',
@@ -23,12 +120,18 @@ async function handler(req, res) {
     const html = await response.text();
     
     // Extract article content
-    const content = extractContent(html);
+    const rawContent = extractContent(html);
+    
+    // Rewrite with Groq for clean formatting
+    const content = await rewriteContent(rawContent, title);
+    
+    // Cache the rewritten content
+    await r.set(cacheKey, content, 'EX', CACHE_TTL);
     
     return res.status(200).json({ 
       content,
       url,
-      fetchedAt: new Date().toISOString(),
+      cached: false,
     });
   } catch (error) {
     return res.status(500).json({ error: error.message });
@@ -102,22 +205,11 @@ function extractContent(html) {
       .replace(/\s+/g, ' ')
       .trim();
     
-    // Clean up bylines, timestamps, and metadata cruft
+    // Clean up UI element cruft that gets mashed in
     para = para
-      // Remove "Updated HH:MM, DD Mon YYYY" patterns
-      .replace(/Updated\s*\d{1,2}:\d{2},?\s*\d{1,2}\s+\w+\s+\d{4}/gi, '')
-      // Remove "HH:MM, DD Mon YYYY" at start
-      .replace(/^\d{1,2}:\d{2},?\s*\d{1,2}\s+\w+\s+\d{4}/i, '')
-      // Remove "View X Images" 
+      .replace(/^Comments/i, '')
       .replace(/View\s*\d+\s*Images?/gi, '')
-      // Remove "(Image: SOURCE)" or "(Image: UGC)" etc
-      .replace(/\(Image:\s*[^)]+\)/gi, '')
-      // Remove bylines like "By John Smith" or "NewsJohn Smith"
-      .replace(/^(News)?[A-Z][a-z]+\s+[A-Z][a-z]+(\s+[A-Z][a-z]+)?\s*(News\s*)?(Reporter|Editor|Correspondent)?/i, '')
-      // Remove "DD Mon YYYYName Name" pattern (no space between date and name)
-      .replace(/\d{1,2}\s+\w+\s+\d{4}[A-Z][a-z]+\s+[A-Z][a-z]+/g, '')
-      // Clean up any resulting double spaces
-      .replace(/\s+/g, ' ')
+      .replace(/^\s*[,;:.]\s*/, '')
       .trim();
     
     // Filter out short/junk paragraphs
@@ -125,14 +217,12 @@ function extractContent(html) {
       'Share', 'Cookie', 'Subscribe', 'Newsletter', 'Follow BBC', 'Follow us',
       'Listen to', 'Watch on', 'Download the', 'Get the app', 'Sign up',
       'Related internet', 'External link', 'Send your story', 'highlights from',
-      'Read more:', 'See also:', 'MORE:', 'ALSO READ'
+      'Read more:', 'See also:', 'MORE:', 'ALSO READ', 'View gallery',
+      'View images', 'Comments'
     ];
-    const isJunk = junkPatterns.some(p => para.includes(p));
+    const isJunk = junkPatterns.some(p => para.toLowerCase().includes(p.toLowerCase()));
     
-    // Also skip if it looks like just metadata (short + has timestamp patterns)
-    const looksLikeMetadata = para.length < 100 && /\d{1,2}:\d{2}|\d{4}/.test(para);
-    
-    if (para.length > 50 && !isJunk && !looksLikeMetadata) {
+    if (para.length > 40 && !isJunk) {
       paragraphs.push(para);
     }
   }
