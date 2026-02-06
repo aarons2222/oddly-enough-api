@@ -235,13 +235,18 @@ function parseDate(dateStr) {
 }
 
 async function fetchRSS(feedUrl) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5000); // 5 second timeout per feed
+  
   try {
     const response = await fetch(feedUrl, {
       headers: { 
         'User-Agent': 'Mozilla/5.0 (compatible; OddlyEnough/1.0; +https://oddlyenough.app)',
         'Accept': 'application/rss+xml,application/xml,text/xml,*/*',
-      }
+      },
+      signal: controller.signal,
     });
+    clearTimeout(timeout);
     const text = await response.text();
     
     const items = [];
@@ -300,6 +305,7 @@ async function fetchRSS(feedUrl) {
     }
     return items;
   } catch (error) {
+    clearTimeout(timeout);
     console.error(`RSS fetch error for ${feedUrl}:`, error.message);
     return [];
   }
@@ -470,7 +476,7 @@ function fixMirrorImage(url) {
 // In-memory cache
 let cachedArticles = null;
 let cacheTime = 0;
-const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const CACHE_TTL = 30 * 60 * 1000; // 30 minutes (was 5 min, caused too many slow refreshes)
 
 async function handler(req, res) {
   // Handle CORS preflight
