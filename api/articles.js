@@ -6,8 +6,15 @@ const GROQ_API_KEY = process.env.GROQ_API_KEY;
 // Simple delay helper
 const delay = ms => new Promise(r => setTimeout(r, ms));
 
-// Enhance summary with Groq LLM - ALWAYS runs for consistency
+// Enhance summary with Groq LLM - DISABLED for speed (was causing 30s+ load times)
 async function enhanceSummary(title, summary, source, retries = 2) {
+  // Skip LLM enhancement for now - too slow
+  if (summary && summary.length > 20) {
+    return summary.slice(0, 150) + (summary.length > 150 ? '...' : '');
+  }
+  return `${title.slice(0, 100)}${title.length > 100 ? '...' : ''}`;
+  
+  /* DISABLED - Groq calls were causing 30s+ load times
   if (!GROQ_API_KEY) return summary || `${title.slice(0, 100)}...`;
   
   // Use title if summary is missing or is a generic placeholder
@@ -70,6 +77,7 @@ Summary:`
   
   // All retries failed - generate a simple summary from title
   return `${title.slice(0, 100)}${title.length > 100 ? '...' : ''}`;
+  */
 }
 
 const RSS_FEEDS = [
@@ -501,23 +509,11 @@ async function handler(req, res) {
     const articlePromises = filtered.map(async (item, i) => {
       let imageUrl = item.thumbnail;
       
-      // For sources without thumbnail, try to get an image
-      if (!imageUrl) {
-        // Check for source default image first
-        if (DEFAULT_IMAGES[feed.source]) {
-          imageUrl = DEFAULT_IMAGES[feed.source];
-        } else {
-          // Fetch og:image from actual article
-          try {
-            const ogImage = await fetchOgImage(item.link, null);
-            if (ogImage) {
-              imageUrl = ogImage;
-            }
-          } catch (e) {
-            // Failed to fetch, will use placeholder
-          }
-        }
+      // For sources without thumbnail, use default image (skip slow og:image fetch)
+      if (!imageUrl && DEFAULT_IMAGES[feed.source]) {
+        imageUrl = DEFAULT_IMAGES[feed.source];
       }
+      // Skip articles without images (fetching og:image was too slow)
       
       // Fix BBC image URLs
       if (feed.source.includes('BBC') && imageUrl) {
@@ -666,12 +662,9 @@ async function handler(req, res) {
     }
   });
   
-  // Fetch og:image for articles without images (limit 10)
-  const needImages = articles.filter(a => !a.imageUrl).slice(0, 10);
-  await Promise.all(needImages.map(async (article) => {
-    const img = await fetchOgImage(article.url, article.source);
-    if (img) article.imageUrl = img;
-  }));
+  // DISABLED - og:image fetching was too slow
+  // Just filter out articles without images instead
+  articles = articles.filter(a => a.imageUrl);
   
   // Separate curated and RSS articles
   const curatedIds = CURATED_ARTICLES.map(a => a.id);
