@@ -80,27 +80,21 @@ Summary:`
   */
 }
 
+// REDUCED feed list for faster loading (Vercel has 10s timeout)
 const RSS_FEEDS = [
-  // Reddit weird news (the best source!) - use old.reddit.com to avoid 403
-  // These subreddits link to real news articles, not just reddit images
+  // Reddit - best source, usually fast
   { url: 'https://old.reddit.com/r/nottheonion/.rss', category: 'viral', source: 'r/nottheonion', alwaysOdd: true },
-  { url: 'https://old.reddit.com/r/FloridaMan/.rss', category: 'viral', source: 'r/FloridaMan', alwaysOdd: true },
   { url: 'https://old.reddit.com/r/offbeat/.rss', category: 'viral', source: 'r/offbeat', alwaysOdd: true },
   
-  // Dedicated weird/odd news feeds (always include - no filtering)
-  { url: 'https://rss.upi.com/news/odd_news.rss', category: 'viral', source: 'UPI Odd', alwaysOdd: true },
-  { url: 'https://www.theregister.com/offbeat/headlines.atom', category: 'tech', source: 'The Register', alwaysOdd: true },
+  // Fast UK tabloid feeds with images
   { url: 'https://www.mirror.co.uk/news/weird-news/rss.xml', category: 'viral', source: 'Mirror Weird', alwaysOdd: true },
   { url: 'https://www.dailystar.co.uk/news/weird-news/rss.xml', category: 'viral', source: 'Daily Star', alwaysOdd: true },
-  { url: 'https://feeds.skynews.com/feeds/rss/strange.xml', category: 'viral', source: 'Sky News', alwaysOdd: true },
-  { url: 'https://www.independent.co.uk/news/weird-news/rss', category: 'viral', source: 'Independent', alwaysOdd: true },
-  { url: 'https://www.sciencedaily.com/rss/strange_offbeat.xml', category: 'tech', source: 'ScienceDaily', alwaysOdd: true },
   
-  // General news feeds (filtered for oddness)
-  { url: 'https://feeds.bbci.co.uk/news/england/rss.xml', category: 'viral', source: 'BBC' },
-  { url: 'https://feeds.bbci.co.uk/sport/rss.xml', category: 'sport', source: 'BBC Sport' },
-  { url: 'https://feeds.bbci.co.uk/news/science_and_environment/rss.xml', category: 'animals', source: 'BBC' },
-  { url: 'https://feeds.bbci.co.uk/news/technology/rss.xml', category: 'tech', source: 'BBC Tech' },
+  // UPI Odd - reliable and fast
+  { url: 'https://rss.upi.com/news/odd_news.rss', category: 'viral', source: 'UPI Odd', alwaysOdd: true },
+  
+  // The Register - tech weirdness
+  { url: 'https://www.theregister.com/offbeat/headlines.atom', category: 'tech', source: 'The Register', alwaysOdd: true },
 ];
 
 // Curated articles (guaranteed odd)
