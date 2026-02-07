@@ -1,5 +1,5 @@
-// Oddly Enough API - /api/article?id=UUID
-// Returns a single article by ID for deep linking / share pages
+// Oddly Enough API - /api/article?id=UUID or /api/article?url=SOURCE_URL
+// Returns a single article by ID or source URL for deep linking / share pages
 
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://wzvvfsuumtmewrogiqed.supabase.co';
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY;
@@ -10,14 +10,19 @@ async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   if (req.method === 'OPTIONS') return res.status(200).end();
 
-  const { id } = req.query;
+  const { id, url: sourceUrl } = req.query;
 
-  if (!id) {
-    return res.status(400).json({ error: 'Missing article id' });
+  if (!id && !sourceUrl) {
+    return res.status(400).json({ error: 'Missing article id or url' });
   }
 
   try {
-    const url = `${SUPABASE_URL}/rest/v1/articles?id=eq.${encodeURIComponent(id)}&select=id,title,summary,source_url,source_name,category,image_url,weirdness_score,published_at&limit=1`;
+    let url;
+    if (id) {
+      url = `${SUPABASE_URL}/rest/v1/articles?id=eq.${encodeURIComponent(id)}&select=id,title,summary,source_url,source_name,category,image_url,weirdness_score,published_at&limit=1`;
+    } else {
+      url = `${SUPABASE_URL}/rest/v1/articles?source_url=eq.${encodeURIComponent(sourceUrl)}&select=id,title,summary,source_url,source_name,category,image_url,weirdness_score,published_at&limit=1`;
+    }
     
     const response = await fetch(url, {
       headers: {
