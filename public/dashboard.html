@@ -206,6 +206,36 @@ tbody td{padding:10px 12px;vertical-align:middle}
 .error-msg{color:var(--coral);font-size:.82rem;padding:12px;text-align:center}
 .empty-msg{color:var(--text-muted);font-size:.82rem;padding:20px;text-align:center;font-style:italic}
 
+/* ── Platform Badges ── */
+.platform-badges{display:flex;flex-wrap:wrap;gap:4px}
+.platform-badge{
+  display:inline-block;padding:2px 8px;border-radius:10px;font-size:.62rem;
+  font-weight:700;font-family:'Space Grotesk',sans-serif;letter-spacing:.3px;
+  line-height:1.6;white-space:nowrap;
+}
+.pb-x{background:#1a1a2e;color:#e0e0e0;border:1px solid rgba(255,255,255,0.12)}
+.pb-facebook{background:rgba(24,119,242,0.18);color:#60A5FA;border:1px solid rgba(24,119,242,0.25)}
+.pb-instagram{background:linear-gradient(135deg,rgba(214,41,118,0.18),rgba(150,47,191,0.18));color:#E879A8;border:1px solid rgba(214,41,118,0.25)}
+.pb-tiktok{background:#1a1a2e;color:#e0e0e0;border:1px solid rgba(255,255,255,0.12)}
+.pb-pending{background:rgba(100,116,139,0.15);color:var(--text-muted);border:1px solid rgba(100,116,139,0.2)}
+
+/* ── Status Flow ── */
+.status-flow{display:flex;align-items:center;gap:2px;flex-wrap:nowrap}
+.sf-step{
+  font-size:.58rem;font-weight:600;font-family:'Space Grotesk',sans-serif;
+  padding:2px 6px;border-radius:6px;letter-spacing:.3px;white-space:nowrap;
+  text-transform:uppercase;
+}
+.sf-step.sf-active{font-weight:700}
+.sf-step.sf-done{opacity:0.85}
+.sf-step.sf-future{opacity:0.25}
+.sf-arrow{font-size:.55rem;color:var(--text-muted);opacity:.4;padding:0 1px}
+.sf-found.sf-active,.sf-found.sf-done{background:var(--yellow-dim);color:var(--yellow)}
+.sf-summarising.sf-active,.sf-summarising.sf-done{background:var(--blue-dim);color:var(--blue)}
+.sf-ready.sf-active,.sf-ready.sf-done{background:var(--green-dim);color:var(--green)}
+.sf-published.sf-active,.sf-published.sf-done{background:var(--teal-dim);color:var(--teal)}
+.sf-posted.sf-active,.sf-posted.sf-done{background:var(--coral-dim);color:var(--coral)}
+
 /* ── Responsive ── */
 @media(max-width:768px){
   .header{flex-direction:column;align-items:flex-start}
@@ -398,19 +428,43 @@ function truncate(s, n) {
 }
 
 // ── Render Functions ──
-function renderArticlesTable(articles) {
+function renderArticlesTable(articles, socialPosts) {
   const el = document.getElementById('articles-table');
   if (!articles || articles.length === 0) {
     el.innerHTML = '<div class="empty-msg">No published articles yet</div>';
     return;
   }
+  // Build a map of article_id → list of platforms posted to
+  const socialMap = {};
+  if (socialPosts && socialPosts.length > 0) {
+    for (const sp of socialPosts) {
+      if (!socialMap[sp.article_id]) socialMap[sp.article_id] = [];
+      const p = (sp.platform || '').toLowerCase();
+      if (!socialMap[sp.article_id].includes(p)) socialMap[sp.article_id].push(p);
+    }
+  }
   let html = `<table><thead><tr>
-    <th>Title</th><th>Category</th><th style="text-align:center">Weird</th><th>Published</th><th>Source</th>
+    <th>Title</th><th>Platforms</th><th>Category</th><th style="text-align:center">Weird</th><th>Published</th><th>Source</th>
   </tr></thead><tbody>`;
   for (const a of articles) {
     const wc = weirdnessClass(a.weirdness_score);
+    const platforms = socialMap[a.id] || [];
+    let platformHtml = '';
+    if (platforms.length === 0) {
+      platformHtml = '<span class="platform-badge pb-pending">Pending</span>';
+    } else {
+      const badgeMap = {
+        'x': '<span class="platform-badge pb-x">X</span>',
+        'twitter': '<span class="platform-badge pb-x">X</span>',
+        'facebook': '<span class="platform-badge pb-facebook">FB</span>',
+        'instagram': '<span class="platform-badge pb-instagram">IG</span>',
+        'tiktok': '<span class="platform-badge pb-tiktok">TT</span>',
+      };
+      platformHtml = platforms.map(p => badgeMap[p] || `<span class="platform-badge pb-pending">${escHtml(p)}</span>`).join('');
+    }
     html += `<tr>
       <td class="title-cell"><div class="title-text">${escHtml(truncate(a.title, 70))}</div></td>
+      <td><div class="platform-badges">${platformHtml}</div></td>
       <td><span class="category-tag">${escHtml(a.category || '—')}</span></td>
       <td style="text-align:center"><span class="weirdness-badge ${wc}">${a.weirdness_score ?? '?'}</span></td>
       <td><span class="time-ago">${timeAgo(a.published_at)}</span></td>
@@ -421,21 +475,43 @@ function renderArticlesTable(articles) {
   el.innerHTML = html;
 }
 
-function renderDraftsTable(drafts) {
+function renderDraftsTable(drafts, socialPosts) {
   const el = document.getElementById('drafts-table');
   if (!drafts || drafts.length === 0) {
     el.innerHTML = '<div class="empty-msg">No drafts in pipeline</div>';
     return;
   }
+  // Build set of article_ids that have social posts
+  const postedIds = new Set();
+  if (socialPosts && socialPosts.length > 0) {
+    for (const sp of socialPosts) postedIds.add(sp.article_id);
+  }
+  const flowSteps = ['found','summarising','ready','published','posted'];
+  const flowOrder = { found: 0, summarising: 1, ready: 2, published: 3, posted: 4 };
+  function buildStatusFlow(status, articleId) {
+    let currentIdx = flowOrder[status] ?? 0;
+    // If published and has social posts, show as "posted"
+    if (status === 'published' && postedIds.has(articleId)) currentIdx = 4;
+    return '<div class="status-flow">' + flowSteps.map((step, i) => {
+      let cls = `sf-step sf-${step}`;
+      if (i < currentIdx) cls += ' sf-done';
+      else if (i === currentIdx) cls += ' sf-active';
+      else cls += ' sf-future';
+      const label = step.charAt(0).toUpperCase() + step.slice(1);
+      return (i > 0 ? '<span class="sf-arrow">›</span>' : '') + `<span class="${cls}">${label}</span>`;
+    }).join('') + '</div>';
+  }
   let html = `<table><thead><tr>
-    <th>Title</th><th>Status</th><th style="text-align:center">Weird</th><th>In Pipeline</th>
+    <th>Title</th><th>Status</th><th>Progress</th><th style="text-align:center">Weird</th><th>In Pipeline</th>
   </tr></thead><tbody>`;
   for (const d of drafts) {
     const wc = weirdnessClass(d.weirdness_score);
     const statusClass = `badge-${d.status || 'found'}`;
+    const status = d.status || 'found';
     html += `<tr>
-      <td class="title-cell"><div class="title-text">${escHtml(truncate(d.title, 60))}</div></td>
-      <td><span class="badge ${statusClass}">${escHtml(d.status || 'unknown')}</span></td>
+      <td class="title-cell"><div class="title-text">${escHtml(truncate(d.title, 50))}</div></td>
+      <td><span class="badge ${statusClass}">${escHtml(status)}</span></td>
+      <td>${buildStatusFlow(status, d.article_id || d.id)}</td>
       <td style="text-align:center"><span class="weirdness-badge ${wc}">${d.weirdness_score ?? '?'}</span></td>
       <td><span class="time-ago">${timeAgo(d.created_at)}</span></td>
     </tr>`;
@@ -566,15 +642,16 @@ async function renderStats(articles, allDrafts) {
 // ── Main Refresh ──
 async function refresh() {
   try {
-    const [articlesRes, draftsRes, logsRes, allDraftsRes] = await Promise.all([
+    const [articlesRes, draftsRes, logsRes, allDraftsRes, socialRes] = await Promise.all([
       api('/rest/v1/articles?select=*&order=published_at.desc&limit=20'),
       api('/rest/v1/article_drafts?select=*&status=neq.published&order=created_at.desc&limit=30'),
       api('/rest/v1/agent_log?select=*&order=created_at.desc&limit=50'),
       api('/rest/v1/article_drafts?select=id,status&order=created_at.desc&limit=500'),
+      api('/rest/v1/social_posts?select=article_id,platform,status,posted_at&order=posted_at.desc'),
     ]);
 
-    renderArticlesTable(articlesRes.data);
-    renderDraftsTable(draftsRes.data);
+    renderArticlesTable(articlesRes.data, socialRes.data);
+    renderDraftsTable(draftsRes.data, socialRes.data);
     renderLogFeed(logsRes.data);
     renderPipeline(allDraftsRes.data);
     renderAgents(logsRes.data);
