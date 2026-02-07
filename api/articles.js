@@ -956,19 +956,41 @@ async function handler(req, res) {
     await Promise.all(needImages.map(async (article) => {
       try {
         const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 3000);
+        const timeout = setTimeout(() => controller.abort(), 4000);
         const resp = await fetch(article.url, {
-          headers: { 'User-Agent': 'Mozilla/5.0 (compatible; OddlyEnough/1.0)' },
+          headers: { 
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html',
+          },
           signal: controller.signal,
           redirect: 'follow',
         });
         clearTimeout(timeout);
         const html = await resp.text();
+        
+        // Try og:image / twitter:image
         const ogMatch = html.match(/property="og:image"\s+content="([^"]+)"/i)
                       || html.match(/content="([^"]+)"\s+property="og:image"/i)
-                      || html.match(/name="twitter:image"\s+content="([^"]+)"/i);
+                      || html.match(/name="twitter:image"\s+content="([^"]+)"/i)
+                      || html.match(/property="og:image:secure_url"\s+content="([^"]+)"/i);
         if (ogMatch && ogMatch[1]) {
           article.imageUrl = ogMatch[1].replace(/&amp;/g, '&');
+          return;
+        }
+        
+        // Fallback: find first large content image (skip logos/icons/tiny images)
+        const imgMatches = [...html.matchAll(/<img[^>]+src="([^"]+)"[^>]*>/gi)];
+        for (const match of imgMatches) {
+          const src = match[0];
+          const url = match[1];
+          // Skip small images, logos, icons, tracking pixels
+          if (/logo|icon|avatar|emoji|gravatar|pixel|badge|button|spinner|loading/i.test(src)) continue;
+          if (/width="[0-9]{1,2}"|height="[0-9]{1,2}"/i.test(src)) continue; // skip tiny
+          // Must be a proper image URL
+          if (/\.(jpg|jpeg|png|webp)/i.test(url) && url.startsWith('http')) {
+            article.imageUrl = url.replace(/&amp;/g, '&');
+            return;
+          }
         }
       } catch (e) {
         // Timeout or fetch failed — leave without image
