@@ -148,14 +148,15 @@ function fallbackSummary(title, summary) {
   return `${title.slice(0, 120)}${title.length > 120 ? '...' : ''}`;
 }
 
-// REDUCED feed list for faster loading (Vercel has 10s timeout)
+// Feed list — fetched in parallel, each has 5s timeout
+// Cron warms cache every 20min so users never wait for fresh fetches
 const RSS_FEEDS = [
   // Reddit - best source, usually fast
   { url: 'https://old.reddit.com/r/nottheonion/.rss', category: 'viral', source: 'r/nottheonion', alwaysOdd: true },
   { url: 'https://old.reddit.com/r/offbeat/.rss', category: 'viral', source: 'r/offbeat', alwaysOdd: true },
   
-  // Fast UK tabloid feeds with images
-  { url: 'https://www.mirror.co.uk/news/weird-news/rss.xml', category: 'viral', source: 'Mirror Weird', alwaysOdd: true },
+  // UK tabloid feeds with images
+  { url: 'https://www.mirror.co.uk/news/weird-news/rss.xml', category: 'viral', source: 'Mirror', alwaysOdd: true },
   { url: 'https://www.dailystar.co.uk/news/weird-news/rss.xml', category: 'viral', source: 'Daily Star', alwaysOdd: true },
   
   // UPI Odd - reliable and fast
@@ -163,10 +164,18 @@ const RSS_FEEDS = [
   
   // The Register - tech weirdness
   { url: 'https://www.theregister.com/offbeat/headlines.atom', category: 'tech', source: 'The Register', alwaysOdd: true },
+  
+  // NY Post Weird But True — great images, proper weird news
+  { url: 'https://nypost.com/weird-but-true/feed/', category: 'viral', source: 'NY Post', alwaysOdd: true },
+  
+  // Oddity Central — dedicated weird news site, images in content
+  { url: 'https://www.odditycentral.com/feed', category: 'viral', source: 'Oddity Central', alwaysOdd: true },
+  
+  // Atlas Obscura — obscure/mysterious places and stories
+  { url: 'https://www.atlasobscura.com/feeds/latest', category: 'mystery', source: 'Atlas Obscura', alwaysOdd: false },
 ];
 
-// Curated articles (guaranteed odd)
-// Curated articles removed - now using only fresh RSS content
+// No curated articles — all content comes from RSS feeds
 const CURATED_ARTICLES = [];
 
 // Strict odd news patterns
@@ -180,45 +189,163 @@ const ODD_PATTERNS = [
   /\b(ai|chatbot|robot)\b.*\b(fail|wrong|bizarre|funny)/i,
 ];
 
-// Patterns to detect "fails" category
+// ---- CATEGORY DETECTION PATTERNS ----
+// Order matters: more specific categories checked first, "viral" is the fallback
+
+const ANIMAL_PATTERNS = [
+  /\b(dog|dogs|puppy|puppies|pup|canine|labrador|retriever|bulldog|terrier|poodle|chihuahua|corgi|dachshund)\b/i,
+  /\b(cat|cats|kitten|kittens|feline|tabby)\b/i,
+  /\b(horse|horses|pony|ponies|donkey|donkeys)\b/i,
+  /\b(bear|bears|wolf|wolves|fox|foxes|deer|moose|elk)\b/i,
+  /\b(snake|snakes|lizard|crocodile|alligator|turtle|tortoise|iguana|gecko)\b/i,
+  /\b(bird|birds|parrot|parrots|penguin|eagle|owl|pigeon|seagull|pelican|flamingo|duck|ducks|goose|swan)\b/i,
+  /\b(monkey|monkeys|ape|apes|gorilla|chimpanzee|orangutan)\b/i,
+  /\b(elephant|elephants|giraffe|hippo|rhino|zebra|lion|tiger|leopard)\b/i,
+  /\b(whale|dolphin|shark|octopus|squid|jellyfish|seal|walrus|otter)\b/i,
+  /\b(raccoon|squirrel|rabbit|hamster|guinea pig|hedgehog|badger|beaver|possum|opossum)\b/i,
+  /\b(spider|spiders|scorpion|bee|bees|wasp|ant|ants|beetle|butterfly|moth)\b/i,
+  /\b(pet|pets|animal|animals|zoo|wildlife|veterinary|vet|sanctuary|shelter)\b/i,
+  /\b(capybara|alpaca|llama|sloth|pangolin|axolotl|wombat|platypus|koala|kangaroo)\b/i,
+  /\b(fish|goldfish|carp|salmon|tuna|lobster|crab|shrimp)\b/i,
+  /\b(cow|cows|bull|pig|pigs|sheep|goat|goats|chicken|chickens|rooster)\b/i,
+];
+
+const FOOD_PATTERNS = [
+  /\b(food|foods|meal|meals|dish|dishes|recipe|recipes|cuisine)\b/i,
+  /\b(restaurant|restaurants|cafe|diner|takeaway|fast food|drive-through|mcdonald|burger king|kfc|subway|nando|greggs)\b/i,
+  /\b(chef|chefs|cook|cooking|baking|baker|kitchen)\b/i,
+  /\b(pizza|burger|burgers|taco|tacos|sushi|ramen|noodles|pasta|curry|kebab)\b/i,
+  /\b(chocolate|cheese|ice cream|cake|cakes|pie|donut|doughnut|biscuit|cookie|cookies)\b/i,
+  /\b(beer|wine|cocktail|whisky|whiskey|vodka|gin|brewery|pub food|bar food)\b/i,
+  /\b(eating|eaten|ate|eats|devour|devoured|consume|consumed)\b.*\b(contest|record|challenge|competitive|world)\b/i,
+  /\b(vegan|vegetarian|organic|gluten|foodie)\b/i,
+  /\b(sandwich|hot dog|chips|fries|nuggets|steak|bacon|sausage|toast)\b/i,
+];
+
+const SPORT_PATTERNS = [
+  /\b(athlete|athletes|runner|runners|swimmer|swimmer|cyclist|gymnast)\b/i,
+  /\b(football|soccer|rugby|cricket|tennis|golf|boxing|mma|ufc|wrestling)\b/i,
+  /\b(marathon|race|races|racing|sprint|triathlon|ultramarathon)\b/i,
+  /\b(olympic|olympics|paralympic|championship|tournament|league|cup|trophy)\b/i,
+  /\b(goalkeeper|striker|midfielder|referee|coach|manager|player|players)\b/i,
+  /\b(gym|fitness|workout|exercise|bodybuilder|bodybuilding|crossfit|weightlifting)\b/i,
+  /\b(surfing|surfer|skating|skier|skiing|snowboard|climbing|climber)\b/i,
+  /\b(baseball|basketball|nba|nfl|hockey|nhl|mlb)\b/i,
+  /\b(world record)\b.*\b(run|swim|lift|eat|jump|throw|push|pull|hold|balance)\b/i,
+];
+
+const CRIME_PATTERNS = [
+  /\b(arrested|arrest|arrests|busted|caught|detained|apprehended)\b/i,
+  /\b(police|cops|officer|officers|sheriff|detective|fbi|interpol)\b/i,
+  /\b(charged|convicted|sentenced|jailed|prison|jail|court|trial|verdict)\b/i,
+  /\b(theft|thief|thieves|robber|robbery|burglary|burglar|heist|stolen|stole)\b/i,
+  /\b(smuggling|smuggler|smuggled|trafficking|dealer|dealing)\b/i,
+  /\b(fraud|scam|scammer|con artist|counterfeit|forgery|forged)\b/i,
+  /\b(fugitive|manhunt|wanted|escaped|escape|escapee|getaway)\b/i,
+  /\b(mugshot|criminal|criminals|crime|crimes|offender|suspect)\b/i,
+];
+
+const PROPERTY_PATTERNS = [
+  /\b(house|houses|home|homes|flat|flats|apartment|apartments|bungalow|mansion|cottage)\b/i,
+  /\b(estate agent|realtor|property|properties|housing|real estate|listing)\b/i,
+  /\b(bedroom|bathroom|kitchen|garden|garage|attic|basement|cellar)\b/i,
+  /\b(renovation|renovated|converted|extension|planning permission)\b/i,
+  /\b(rightmove|zoopla|zillow|airbnb)\b/i,
+  /\b(tenant|landlord|mortgage|rent|rental|lease)\b/i,
+  /\b(bizarre home|weird house|strange building|unusual property)\b/i,
+];
+
+const TECH_PATTERNS = [
+  /\b(ai|artificial intelligence|chatbot|chatgpt|gpt|llm|machine learning|deep learning)\b/i,
+  /\b(robot|robots|robotic|robotics|drone|drones|autonomous)\b/i,
+  /\b(app|apps|software|algorithm|coding|programming|developer)\b/i,
+  /\b(hack|hacker|hackers|hacking|cybersecurity|cyber|malware|ransomware|phishing)\b/i,
+  /\b(tesla|spacex|apple|google|meta|microsoft|amazon|nvidia|openai)\b/i,
+  /\b(gadget|gadgets|device|tech|technology|digital|internet|online|wifi|bluetooth)\b/i,
+  /\b(smartphone|iphone|android|laptop|computer|gaming|gamer|video game)\b/i,
+  /\b(virtual reality|vr|ar|augmented reality|metaverse|blockchain|crypto|bitcoin|nft)\b/i,
+];
+
+const WORLD_PATTERNS = [
+  /\b(japan|japanese|tokyo|china|chinese|beijing|india|indian|mumbai|delhi)\b/i,
+  /\b(australia|australian|sydney|melbourne|new zealand)\b/i,
+  /\b(russia|russian|moscow|ukraine|brazil|brazilian|mexico|mexican)\b/i,
+  /\b(germany|german|berlin|france|french|paris|italy|italian|rome|spain|spanish|madrid)\b/i,
+  /\b(canada|canadian|toronto|south africa|african|egypt|egyptian|dubai|saudi)\b/i,
+  /\b(thailand|thai|bangkok|vietnam|indonesia|philippines|singapore|korea|korean|seoul)\b/i,
+  /\b(florida man|florida woman|texas|california|new york|las vegas|chicago|los angeles)\b/i,
+  /\b(nasa|space station|astronaut|cosmonaut|satellite|mars|moon landing)\b/i,
+];
+
 const FAIL_PATTERNS = [
   /\b(fail|fails|failed|failing|epic fail)\b/i,
   /\b(mistake|blunder|oops|disaster|backfire|backfired)\b/i,
   /\b(embarrassing|humiliating|cringe|awkward)\b/i,
   /\b(wrong|badly wrong|goes wrong|went wrong)\b/i,
+  /\b(worst|terrible|horrible|disastrous|catastrophe|fiasco)\b/i,
 ];
 
-// Patterns to detect "british" category
 const BRITISH_PATTERNS = [
-  /\b(uk|britain|british|england|english|wales|welsh|scotland|scottish)\b/i,
-  /\b(london|manchester|birmingham|liverpool|leeds|bristol|cornwall|devon)\b/i,
-  /\b(pub|chippy|greggs|wetherspoons|tesco|asda|lidl|aldi)\b/i,
-  /\b(nhs|bbc|council|high street|queue|queueing)\b/i,
+  /\b(uk|britain|british|england|english|wales|welsh|scotland|scottish|northern ireland)\b/i,
+  /\b(london|manchester|birmingham|liverpool|leeds|bristol|cornwall|devon|brighton|edinburgh|glasgow|cardiff|lincoln|nottingham|sheffield|newcastle|oxford|cambridge|bath|york)\b/i,
+  /\b(pub|pubs|chippy|greggs|wetherspoons|tesco|asda|lidl|aldi|sainsbury|morrisons|primark|argos)\b/i,
+  /\b(nhs|bbc|council|high street|queue|queueing|roundabout|motorway|a-road|m25)\b/i,
+  /\b(royal|king charles|queen|prince|princess|buckingham|windsor|downing street)\b/i,
+  /\b(bloke|mate|lad|chap|banter|proper|dodgy|rubbish|brilliant|naff)\b/i,
 ];
 
-// Patterns to detect "mystery" category  
 const MYSTERY_PATTERNS = [
   /\b(mystery|mysterious|unexplained|unknown|unsolved)\b/i,
-  /\b(ufo|alien|paranormal|ghost|haunted|supernatural)\b/i,
-  /\b(bizarre|baffled|puzzled|strange|eerie|creepy)\b/i,
-  /\b(disappeared|vanished|discovered|found.*strange)\b/i,
+  /\b(ufo|ufos|alien|aliens|paranormal|ghost|ghosts|haunted|supernatural|poltergeist)\b/i,
+  /\b(bizarre|baffled|puzzled|strange|eerie|creepy|spooky|uncanny)\b/i,
+  /\b(disappeared|vanished|discovered|found.*strange|found.*mysterious)\b/i,
+  /\b(conspiracy|cryptid|bigfoot|sasquatch|loch ness|mothman|bermuda triangle)\b/i,
+  /\b(ancient|archaeological|archaeology|artifact|relic|tomb|mummy|fossil)\b/i,
+  /\b(obscura|obscure|forgotten|hidden|secret|underground|abandoned)\b/i,
 ];
 
-function isFail(title, description) {
-  const text = `${title} ${description}`;
-  return FAIL_PATTERNS.some(p => p.test(text));
+// Detect the best category for an article — checks most specific first
+function detectCategory(title, description, feedCategory) {
+  const text = `${title} ${description}`.toLowerCase();
+  
+  // Score each category by how many patterns match
+  const scores = {
+    animals:  ANIMAL_PATTERNS.filter(p => p.test(text)).length,
+    food:     FOOD_PATTERNS.filter(p => p.test(text)).length,
+    sport:    SPORT_PATTERNS.filter(p => p.test(text)).length,
+    crime:    CRIME_PATTERNS.filter(p => p.test(text)).length,
+    property: PROPERTY_PATTERNS.filter(p => p.test(text)).length,
+    tech:     TECH_PATTERNS.filter(p => p.test(text)).length,
+    mystery:  MYSTERY_PATTERNS.filter(p => p.test(text)).length,
+    fails:    FAIL_PATTERNS.filter(p => p.test(text)).length,
+    british:  BRITISH_PATTERNS.filter(p => p.test(text)).length,
+    world:    WORLD_PATTERNS.filter(p => p.test(text)).length,
+  };
+  
+  // Find the highest scoring category
+  let bestCat = feedCategory || 'viral';
+  let bestScore = 0;
+  
+  for (const [cat, score] of Object.entries(scores)) {
+    if (score > bestScore) {
+      bestScore = score;
+      bestCat = cat;
+    }
+  }
+  
+  // If nothing matched strongly, use feed default
+  if (bestScore === 0) return feedCategory || 'viral';
+  
+  // British check: if british matched AND another category matched, prefer british
+  // (e.g. "London dog rescued from Thames" = british, not animals)
+  if (scores.british >= 2 && bestCat !== 'british') {
+    return 'british';
+  }
+  
+  return bestCat;
 }
 
-function isBritish(title, description) {
-  const text = `${title} ${description}`;
-  return BRITISH_PATTERNS.some(p => p.test(text));
-}
-
-function isMystery(title, description) {
-  const text = `${title} ${description}`;
-  return MYSTERY_PATTERNS.some(p => p.test(text));
-}
-
+// Boring = definitely not weird news, skip these
 const BORING_PATTERNS = [
   /\b(killed|murdered|dead|death|died|fatal|war|conflict|attack|terror)\b/i,
   /\b(government|minister|parliament|election|vote|policy|budget)\b/i,
@@ -343,7 +470,17 @@ async function fetchRSS(feedUrl) {
       }
       
       const pubDate = extractTag(itemXml, 'pubDate') || extractTag(itemXml, 'published') || extractTag(itemXml, 'updated');
-      const thumbnail = extractAttr(itemXml, 'media:thumbnail', 'url');
+      const thumbnail = extractAttr(itemXml, 'media:thumbnail', 'url') 
+                     || extractAttr(itemXml, 'media:content', 'url')
+                     || extractAttr(itemXml, 'enclosure', 'url');
+      
+      // Also try extracting image from content HTML
+      let contentImage = null;
+      const htmlContent = content || description || '';
+      const imgSrcMatch = htmlContent.match(/<img[^>]+src="([^"]+)"/i);
+      if (imgSrcMatch) {
+        contentImage = imgSrcMatch[1].replace(/&amp;/g, '&');
+      }
       
       if (title && link) {
         // Skip Reddit-hosted media (not real articles)
@@ -361,7 +498,7 @@ async function fetchRSS(feedUrl) {
           description: cleanText(description || ''),
           link: cleanedLink,
           pubDate: parseDate(pubDate),
-          thumbnail: thumbnail ? thumbnail.replace(/&amp;/g, '&') : null,
+          thumbnail: thumbnail ? thumbnail.replace(/&amp;/g, '&') : contentImage,
         });
       }
     }
@@ -646,11 +783,18 @@ async function handler(req, res) {
     const articlePromises = filtered.map(async (item, i) => {
       let imageUrl = item.thumbnail;
       
-      // For sources without thumbnail, use default image (skip slow og:image fetch)
+      // Extract image from content/description HTML if no thumbnail
+      if (!imageUrl && item.description) {
+        const imgMatch = item.description.match(/<img[^>]+src="([^"]+)"/i);
+        if (imgMatch && imgMatch[1]) {
+          imageUrl = imgMatch[1].replace(/&amp;/g, '&');
+        }
+      }
+      
+      // For sources without thumbnail, use default image
       if (!imageUrl && DEFAULT_IMAGES[feed.source]) {
         imageUrl = DEFAULT_IMAGES[feed.source];
       }
-      // Skip articles without images (fetching og:image was too slow)
       
       // Fix BBC image URLs
       if (feed.source.includes('BBC') && imageUrl) {
@@ -659,6 +803,10 @@ async function handler(req, res) {
       // Fix Mirror/Daily Star low-res thumbnails
       if ((feed.source.includes('Mirror') || feed.source.includes('Daily Star')) && imageUrl) {
         imageUrl = fixMirrorImage(imageUrl);
+      }
+      // Fix NY Post URL-encoded image URLs
+      if (feed.source === 'NY Post' && imageUrl) {
+        imageUrl = decodeURIComponent(imageUrl).split('?')[0];
       }
       // Strip HTML and clean summary
       let summary = item.description
@@ -716,15 +864,8 @@ async function handler(req, res) {
       
       summary = summary.slice(0, 200) + (summary.length > 200 ? '...' : '');
       
-      // Detect special categories based on content
-      let articleCategory = feed.category;
-      if (isFail(item.title, summary)) {
-        articleCategory = 'fails';
-      } else if (isMystery(item.title, summary)) {
-        articleCategory = 'mystery';
-      } else if (isBritish(item.title, summary)) {
-        articleCategory = 'british';
-      }
+      // Detect category using scoring system
+      let articleCategory = detectCategory(item.title, summary, feed.category);
       
       // Skip articles without images
       if (!imageUrl) {
@@ -812,7 +953,7 @@ async function handler(req, res) {
   rss.sort((a, b) => new Date(b.publishedAt) - new Date(a.publishedAt));
   
   // Mix: all curated + top RSS (curated first, then recent RSS)
-  const mixed = [...curated, ...rss.slice(0, 30 - curated.length)];
+  const mixed = [...curated, ...rss.slice(0, 50 - curated.length)];
   
   // Shuffle slightly to mix curated into the feed
   mixed.sort(() => Math.random() - 0.5);
