@@ -27,7 +27,9 @@ async function handler(req, res) {
     });
 
     if (!response.ok) {
-      throw new Error(`Supabase fetch failed: ${response.status}`);
+      const errText = await response.text();
+      console.error('[article] Supabase error:', response.status, errText);
+      throw new Error(`Supabase fetch failed: ${response.status} - ${errText}`);
     }
 
     const articles = await response.json();
@@ -53,7 +55,7 @@ async function handler(req, res) {
     });
   } catch (e) {
     console.error('[article] Fetch failed:', e.message);
-    return res.status(500).json({ error: 'Failed to fetch article' });
+    return res.status(500).json({ error: 'Failed to fetch article', detail: e.message });
   }
 }
 
