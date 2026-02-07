@@ -172,7 +172,16 @@ const RSS_FEEDS = [
   { url: 'https://www.odditycentral.com/feed', category: 'viral', source: 'Oddity Central', alwaysOdd: true },
   
   // Atlas Obscura — obscure/mysterious places and stories
-  { url: 'https://www.atlasobscura.com/feeds/latest', category: 'mystery', source: 'Atlas Obscura', alwaysOdd: false },
+  { url: 'https://www.atlasobscura.com/feeds/latest', category: 'mystery', source: 'Atlas Obscura', alwaysOdd: true },
+  
+  // Boing Boing — tech/culture weirdness
+  { url: 'https://boingboing.net/feed', category: 'tech', source: 'Boing Boing', alwaysOdd: false },
+  
+  // Neatorama — curated oddities
+  { url: 'https://www.neatorama.com/feed/', category: 'viral', source: 'Neatorama', alwaysOdd: true },
+  
+  // Independent weird news
+  { url: 'https://www.independent.co.uk/topic/weird-news/rss', category: 'viral', source: 'Independent', alwaysOdd: true },
 ];
 
 // No curated articles — all content comes from RSS feeds
@@ -513,6 +522,7 @@ async function fetchRSS(feedUrl) {
 // Default images for sources without thumbnails
 const DEFAULT_IMAGES = {
   'The Register': 'https://www.theregister.com/design_picker/621fa76b064a476dc713ebf25bbf16451c706c03/graphics/icons/reg_logo_og_image_1200x630.jpg',
+  'Boing Boing': 'https://i0.wp.com/boingboing.net/wp-content/uploads/2018/05/BoingBoing-logo.jpg',
 };
 
 // Weird placeholder messages
@@ -775,9 +785,9 @@ async function handler(req, res) {
     const items = await fetchRSS(feed.url);
     // Filter for odd news and English only
     const filtered = (feed.alwaysOdd 
-      ? items.slice(0, 12)
+      ? items.slice(0, 15)
       : items.filter(item => isOddNews(item.title, item.description))
-    ).filter(item => isEnglish(item.title)).slice(0, 8);
+    ).filter(item => isEnglish(item.title)).slice(0, 10);
     
     // Process items and fetch og:images for Reddit if needed
     const articlePromises = filtered.map(async (item, i) => {
@@ -953,7 +963,7 @@ async function handler(req, res) {
   rss.sort((a, b) => new Date(b.publishedAt) - new Date(a.publishedAt));
   
   // Mix: all curated + top RSS (curated first, then recent RSS)
-  const mixed = [...curated, ...rss.slice(0, 50 - curated.length)];
+  const mixed = [...curated, ...rss.slice(0, 60 - curated.length)];
   
   // Shuffle slightly to mix curated into the feed
   mixed.sort(() => Math.random() - 0.5);
