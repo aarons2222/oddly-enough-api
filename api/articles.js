@@ -877,9 +877,9 @@ async function handler(req, res) {
       // Detect category using scoring system
       let articleCategory = detectCategory(item.title, summary, feed.category);
       
-      // Skip articles without images
+      // Generate placeholder for articles without images
       if (!imageUrl) {
-        return null;
+        imageUrl = generatePlaceholder(item.title);
       }
       
       // Clean title - remove source suffixes
