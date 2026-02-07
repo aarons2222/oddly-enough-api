@@ -17,11 +17,14 @@ async function handler(req, res) {
   }
 
   try {
+    const select = 'id,title,summary,source_url,source_name,category,image_url,weirdness_score,published_at';
     let url;
     if (id) {
-      url = `${SUPABASE_URL}/rest/v1/articles?id=eq.${encodeURIComponent(id)}&select=id,title,summary,source_url,source_name,category,image_url,weirdness_score,published_at&limit=1`;
+      url = `${SUPABASE_URL}/rest/v1/articles?id=eq.${encodeURIComponent(id)}&select=${select}&limit=1`;
     } else {
-      url = `${SUPABASE_URL}/rest/v1/articles?source_url=eq.${encodeURIComponent(sourceUrl)}&select=id,title,summary,source_url,source_name,category,image_url,weirdness_score,published_at&limit=1`;
+      // Strip UTM params for matching — try exact first, fall back to LIKE base URL
+      const baseUrl = sourceUrl.split('?')[0];
+      url = `${SUPABASE_URL}/rest/v1/articles?or=(source_url.eq.${encodeURIComponent(sourceUrl)},source_url.like.${encodeURIComponent(baseUrl + '*')})&select=${select}&limit=1`;
     }
     
     const response = await fetch(url, {
