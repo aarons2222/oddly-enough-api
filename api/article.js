@@ -17,7 +17,7 @@ async function handler(req, res) {
   }
 
   try {
-    const url = `${SUPABASE_URL}/rest/v1/articles?id=eq.${encodeURIComponent(id)}&select=id,title,summary,full_content,source_url,source_name,category,image_url,weirdness_score,published_at&limit=1`;
+    const url = `${SUPABASE_URL}/rest/v1/articles?id=eq.${encodeURIComponent(id)}&select=id,title,summary,source_url,source_name,category,image_url,weirdness_score,published_at&limit=1`;
     
     const response = await fetch(url, {
       headers: {
@@ -42,7 +42,7 @@ async function handler(req, res) {
         id: a.id,
         title: a.title,
         summary: a.summary,
-        content: a.full_content || a.summary,
+        content: a.summary,
         url: a.source_url,
         imageUrl: a.image_url,
         source: a.source_name || 'Oddly Enough',
