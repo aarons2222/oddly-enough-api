@@ -1,7 +1,23 @@
 // Oddly Enough API - /api/articles
 // Fetches and filters odd/weird news from RSS feeds
 
+const Redis = require('ioredis');
 const GROQ_API_KEY = process.env.GROQ_API_KEY;
+
+// Redis - persistent cache that survives cold starts
+let redis;
+function getRedis() {
+  if (!redis) {
+    redis = new Redis(process.env.REDIS_URL, {
+      maxRetriesPerRequest: 3,
+      lazyConnect: true,
+    });
+  }
+  return redis;
+}
+
+const REDIS_CACHE_KEY = 'oddly:articles:cache';
+const REDIS_CACHE_TTL = 60 * 60; // 1 hour in Redis (longer, since we refresh via cron)
 
 // Simple delay helper
 const delay = ms => new Promise(r => setTimeout(r, ms));
@@ -481,12 +497,35 @@ async function handler(req, res) {
   const { category = 'all', refresh } = req.query;
   const now = Date.now();
   
-  // Return cached if fresh
+  // 1. Return in-memory cache if fresh (fastest)
   if (!refresh && cachedArticles && (now - cacheTime) < CACHE_TTL) {
     const filtered = category === 'all' 
       ? cachedArticles 
       : cachedArticles.filter(a => a.category === category);
-    return res.status(200).json({ articles: filtered, cached: true });
+    return res.status(200).json({ articles: filtered, cached: true, source: 'memory' });
+  }
+  
+  // 2. Try Redis cache (survives cold starts)
+  if (!refresh) {
+    try {
+      const r = getRedis();
+      const redisData = await r.get(REDIS_CACHE_KEY);
+      if (redisData) {
+        const parsed = JSON.parse(redisData);
+        // Update in-memory cache too
+        cachedArticles = parsed;
+        cacheTime = now;
+        
+        const filtered = category === 'all' 
+          ? parsed 
+          : parsed.filter(a => a.category === category);
+        
+        console.log(`[articles] Serving ${filtered.length} articles from Redis cache`);
+        return res.status(200).json({ articles: filtered, cached: true, source: 'redis' });
+      }
+    } catch (e) {
+      console.error('[articles] Redis read failed:', e.message);
+    }
   }
   
   // Start with curated articles - also enhance their summaries for consistency
@@ -680,9 +719,20 @@ async function handler(req, res) {
   // Shuffle slightly to mix curated into the feed
   mixed.sort(() => Math.random() - 0.5);
   
-  // Cache results
+  // Cache results (memory + Redis)
   cachedArticles = mixed;
   cacheTime = now;
+  
+  // Save to Redis (don't await - fire and forget)
+  try {
+    const r = getRedis();
+    r.set(REDIS_CACHE_KEY, JSON.stringify(mixed), 'EX', REDIS_CACHE_TTL).catch(e => 
+      console.error('[articles] Redis write failed:', e.message)
+    );
+    console.log(`[articles] Cached ${mixed.length} articles to Redis`);
+  } catch (e) {
+    console.error('[articles] Redis cache save failed:', e.message);
+  }
   
   const filtered = category === 'all' 
     ? cachedArticles 
@@ -691,6 +741,7 @@ async function handler(req, res) {
   return res.status(200).json({ 
     articles: filtered, 
     cached: false,
+    source: 'fresh',
     total: cachedArticles.length,
     fetchedAt: new Date().toISOString(),
   });
