@@ -39,10 +39,24 @@ async function withGroqLimit(fn) {
   }
 }
 
+const SUMMARY_CACHE_TTL = 60 * 60 * 24 * 3; // 3 days — articles rotate out by then
+
 // Enhance summary with Groq LLM — runs in background cron only, never blocks users
 async function enhanceSummary(title, summary, source, retries = 2) {
   if (!GROQ_API_KEY) {
     return fallbackSummary(title, summary);
+  }
+  
+  // Check Redis for a previously enhanced summary (avoid re-processing)
+  const summaryKey = `summary:${title.slice(0, 80).replace(/\s+/g, '_').toLowerCase()}`;
+  try {
+    const r = getRedis();
+    const cached = await r.get(summaryKey);
+    if (cached) {
+      return cached;
+    }
+  } catch (e) {
+    // Redis miss, continue to Groq
   }
   
   // Use title if summary is missing or generic
@@ -105,11 +119,19 @@ Source: ${source}`
       
       if (enhanced && enhanced.length > 15 && enhanced.length < 200) {
         // Clean up any stray quotes or formatting
-        return enhanced
+        const cleaned = enhanced
           .replace(/^["'"]+|["'"]+$/g, '')
           .replace(/^Summary:\s*/i, '')
           .replace(/^Here'?s?\s*(a|the|my)\s*/i, '')
           .trim();
+        
+        // Cache in Redis so we don't re-process this article
+        try {
+          const r = getRedis();
+          r.set(summaryKey, cleaned, 'EX', SUMMARY_CACHE_TTL).catch(() => {});
+        } catch (e) {}
+        
+        return cleaned;
       }
     } catch (e) {
       console.error('Groq enhancement failed:', e.message);
