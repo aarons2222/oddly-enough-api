@@ -1,5 +1,11 @@
 {
   "version": 2,
+  "rewrites": [
+    {
+      "source": "/dashboard",
+      "destination": "/api/dashboard"
+    }
+  ],
   "routes": [
     {
       "src": "/api/(.*)",
@@ -9,10 +15,6 @@
         "Access-Control-Allow-Headers": "Content-Type"
       },
       "continue": true
-    },
-    {
-      "src": "/dashboard",
-      "dest": "/public/dashboard.html"
     }
   ],
   "crons": [
