@@ -392,6 +392,38 @@ function extractAttr(xml, tag, attr) {
   return match ? match[1] : null;
 }
 
+// Extract clean domain name from URL for Reddit-sourced articles
+function extractDomain(url) {
+  try {
+    const hostname = new URL(url).hostname.replace(/^www\./, '');
+    // Map common domains to clean names
+    const domainMap = {
+      'bbc.co.uk': 'BBC', 'bbc.com': 'BBC',
+      'theguardian.com': 'The Guardian',
+      'nytimes.com': 'NY Times',
+      'washingtonpost.com': 'Washington Post',
+      'usmagazine.com': 'US Magazine',
+      'dallasnews.com': 'Dallas News',
+      'justjared.com': 'Just Jared',
+      'thetimes.com': 'The Times',
+      'dexerto.com': 'Dexerto',
+      'the-star.co.ke': 'The Star',
+      'arstechnica.com': 'Ars Technica',
+      'cnn.com': 'CNN',
+      'nbcnews.com': 'NBC News',
+      'foxnews.com': 'Fox News',
+      'apnews.com': 'AP News',
+    };
+    if (domainMap[hostname]) return domainMap[hostname];
+    // Capitalize domain parts: "some-site.com" -> "Some Site"
+    return hostname.split('.')[0]
+      .replace(/-/g, ' ')
+      .replace(/\b\w/g, c => c.toUpperCase());
+  } catch {
+    return 'Web';
+  }
+}
+
 function cleanText(text) {
   if (!text) return '';
   return text
@@ -898,7 +930,7 @@ async function handler(req, res) {
         summary: enhancedSummary,
         url: item.link,
         imageUrl,
-        source: feed.source,
+        source: feed.source.startsWith('r/') ? extractDomain(item.link) : feed.source,
         category: articleCategory,
         publishedAt: item.pubDate,
       };
