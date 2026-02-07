@@ -4,6 +4,29 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Oddly Enough — Mission Control</title>
+<script>
+(function(){
+  const DASH_KEY = 'oddly2026';
+  const stored = sessionStorage.getItem('dash_auth');
+  if (stored === DASH_KEY) return;
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('key') === DASH_KEY) { sessionStorage.setItem('dash_auth', DASH_KEY); return; }
+  document.addEventListener('DOMContentLoaded', function(){
+    document.body.innerHTML = '';
+    document.body.style.cssText = 'display:flex;align-items:center;justify-content:center;min-height:100vh;background:#0a0e1a;font-family:Inter,sans-serif;';
+    const box = document.createElement('div');
+    box.style.cssText = 'background:rgba(20,25,45,0.8);border:1px solid rgba(255,255,255,0.06);border-radius:16px;padding:40px;text-align:center;backdrop-filter:blur(20px);max-width:360px;width:90%;';
+    box.innerHTML = '<div style="font-size:32px;margin-bottom:12px;">🔒</div><h2 style="color:#E2E8F0;font-family:Space Grotesk,sans-serif;margin-bottom:8px;">Mission Control</h2><p style="color:#64748B;margin-bottom:24px;font-size:14px;">Enter access code to continue</p><input id="dk" type="password" placeholder="Access code" style="width:100%;padding:12px 16px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:rgba(10,14,26,0.8);color:#E2E8F0;font-size:16px;outline:none;margin-bottom:16px;" /><button onclick="checkKey()" style="width:100%;padding:12px;border-radius:8px;border:none;background:linear-gradient(135deg,#14B8A6,#0D9488);color:white;font-weight:600;font-size:15px;cursor:pointer;">Enter</button><p id="err" style="color:#FF6B6B;margin-top:12px;font-size:13px;display:none;">Wrong code</p>';
+    document.body.appendChild(box);
+    document.getElementById('dk').addEventListener('keydown',function(e){if(e.key==='Enter')checkKey()});
+    document.getElementById('dk').focus();
+    window.checkKey = function(){
+      if(document.getElementById('dk').value===DASH_KEY){sessionStorage.setItem('dash_auth',DASH_KEY);location.reload();}
+      else{document.getElementById('err').style.display='block';}
+    };
+  });
+})();
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
