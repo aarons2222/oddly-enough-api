@@ -950,9 +950,31 @@ async function handler(req, res) {
     }
   });
   
-  // DISABLED - og:image fetching was too slow
-  // Just filter out articles without images instead
-  articles = articles.filter(a => a.imageUrl);
+  // Fetch og:image for articles missing images (3s timeout per fetch, max 10 concurrent)
+  const needImages = articles.filter(a => !a.imageUrl).slice(0, 10);
+  if (needImages.length > 0) {
+    await Promise.all(needImages.map(async (article) => {
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 3000);
+        const resp = await fetch(article.url, {
+          headers: { 'User-Agent': 'Mozilla/5.0 (compatible; OddlyEnough/1.0)' },
+          signal: controller.signal,
+          redirect: 'follow',
+        });
+        clearTimeout(timeout);
+        const html = await resp.text();
+        const ogMatch = html.match(/property="og:image"\s+content="([^"]+)"/i)
+                      || html.match(/content="([^"]+)"\s+property="og:image"/i)
+                      || html.match(/name="twitter:image"\s+content="([^"]+)"/i);
+        if (ogMatch && ogMatch[1]) {
+          article.imageUrl = ogMatch[1].replace(/&amp;/g, '&');
+        }
+      } catch (e) {
+        // Timeout or fetch failed — leave without image
+      }
+    }));
+  }
   
   // Separate curated and RSS articles
   const curatedIds = CURATED_ARTICLES.map(a => a.id);
