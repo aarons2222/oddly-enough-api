@@ -652,11 +652,11 @@ function renderAgents(logs) {
 
 // ── Agent Command Center ──
 const ACC_AGENTS = [
-  { key: 'scout',    emoji: '🔍', name: 'Scout',    role: 'Article Hunter',    color: '#14B8A6', schedule: 'Every 2 hours',              match: ['scout'] },
-  { key: 'quill',    emoji: '✍️', name: 'Quill',    role: 'Summariser',        color: '#A78BFA', schedule: 'Every 30 min',               match: ['quill'] },
-  { key: 'editor',   emoji: '🛡️', name: 'Editor',   role: 'Quality Gate',      color: '#34D399', schedule: 'Every 30 min (:15, :45)',    match: ['editor'] },
-  { key: 'promoter', emoji: '📣', name: 'Promoter', role: 'Social Media',      color: '#FF6B6B', schedule: '9am, 1pm, 6pm daily',       match: ['promoter'] },
-  { key: 'auditor',  emoji: '🔎', name: 'Auditor',  role: 'Quality Control',   color: '#FBBF24', schedule: '10am, 10pm daily',           match: ['auditor'] },
+  { key: 'scout',    emoji: '🔍', name: 'Scout',    role: 'Article Hunter',    color: '#14B8A6', schedule: 'Every hour',                 match: ['scout','oddly-scout'] },
+  { key: 'quill',    emoji: '✍️', name: 'Quill',    role: 'Summariser',        color: '#A78BFA', schedule: 'Every 20 min',               match: ['quill','oddly-quill'] },
+  { key: 'editor',   emoji: '🛡️', name: 'Editor',   role: 'Quality Gate',      color: '#34D399', schedule: '3× per hour (:10,:30,:50)',  match: ['editor','oddly-editor'] },
+  { key: 'promoter', emoji: '📣', name: 'Promoter', role: 'Social Media',      color: '#FF6B6B', schedule: '9am, 1pm, 6pm daily',       match: ['promoter','oddly-promoter'] },
+  { key: 'auditor',  emoji: '🔎', name: 'Auditor',  role: 'Quality Control',   color: '#FBBF24', schedule: '3× per hour (:05,:25,:45)',  match: ['auditor','oddly-auditor'] },
 ];
 
 function getNextRun(agentKey) {
@@ -675,27 +675,31 @@ function getNextRun(agentKey) {
 
   switch (agentKey) {
     case 'scout': {
-      // Next even hour (0, 2, 4, 6, ...)
-      let nextH = ukH % 2 === 0 ? ukH + 2 : ukH + 1;
-      nextMinutes = (nextH - ukH) * 60 - ukM;
-      if (nextMinutes <= 0) nextMinutes += 120;
+      // Every hour at :00
+      nextMinutes = 60 - ukM;
+      if (nextMinutes <= 0) nextMinutes = 60;
       break;
     }
     case 'quill': {
-      // Next :00 or :30
-      if (ukM < 30) nextMinutes = 30 - ukM;
-      else nextMinutes = 60 - ukM;
+      // Every 20 min (:00, :20, :40)
+      const qSlots = [0, 20, 40, 60];
+      for (const s of qSlots) {
+        if (s > ukM) { nextMinutes = s - ukM; break; }
+      }
+      if (!nextMinutes) nextMinutes = 20;
       break;
     }
     case 'editor': {
-      // Next :15 or :45
-      if (ukM < 15) nextMinutes = 15 - ukM;
-      else if (ukM < 45) nextMinutes = 45 - ukM;
-      else nextMinutes = 75 - ukM; // next hour :15
+      // 3x/hr at :10, :30, :50
+      const eSlots = [10, 30, 50, 70];
+      for (const s of eSlots) {
+        if (s > ukM) { nextMinutes = s - ukM; break; }
+      }
+      if (!nextMinutes) nextMinutes = 20;
       break;
     }
     case 'promoter': {
-      // Next 9, 13, 18
+      // 9am, 1pm, 6pm
       const slots = [9, 13, 18];
       let found = false;
       for (const h of slots) {
@@ -709,17 +713,12 @@ function getNextRun(agentKey) {
       break;
     }
     case 'auditor': {
-      // Next 10 or 22
-      const aSlots = [10, 22];
-      let found = false;
-      for (const h of aSlots) {
-        if (ukH < h || (ukH === h && ukM === 0)) {
-          nextMinutes = (h - ukH) * 60 - ukM;
-          found = true;
-          break;
-        }
+      // 3x/hr at :05, :25, :45
+      const aSlots = [5, 25, 45, 65];
+      for (const s of aSlots) {
+        if (s > ukM) { nextMinutes = s - ukM; break; }
       }
-      if (!found) nextMinutes = (24 - ukH + 10) * 60 - ukM; // tomorrow 10am
+      if (!nextMinutes) nextMinutes = 20;
       break;
     }
   }
@@ -876,7 +875,7 @@ async function refresh() {
     const [articlesRes, draftsRes, logsRes, allDraftsRes, socialRes, todayLogsRes] = await Promise.all([
       api('/rest/v1/articles?select=*&order=published_at.desc&limit=20'),
       api('/rest/v1/article_drafts?select=*&status=neq.published&order=created_at.desc&limit=30'),
-      api('/rest/v1/agent_log?select=*&order=created_at.desc&limit=100'),
+      api('/rest/v1/agent_log?select=*&order=created_at.desc&limit=500'),
       api('/rest/v1/article_drafts?select=id,status&order=created_at.desc&limit=500'),
       api('/rest/v1/social_posts?select=article_id,platform,status,posted_at&order=posted_at.desc'),
       api(`/rest/v1/agent_log?select=agent,action,created_at&created_at=gte.${todayForQuery}&order=created_at.desc&limit=500`),
