@@ -105,13 +105,18 @@ async function handler(req, res) {
       });
     }
 
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000); // 8s timeout
+    
     const response = await fetch(url, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; OddlyEnough/1.0)',
-        'Accept': 'text/html',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml',
       },
       redirect: 'follow',
+      signal: controller.signal,
     });
+    clearTimeout(timeout);
 
     if (!response.ok) {
       return res.status(404).json({ error: 'Article not found' });
@@ -159,28 +164,41 @@ function extractContent(html) {
     .replace(/<div[^>]*class="[^"]*image-credit[^"]*"[^>]*>[\s\S]*?<\/div>/gi, '')
     .replace(/<span[^>]*class="[^"]*credit[^"]*"[^>]*>[\s\S]*?<\/span>/gi, '');
 
-  // Try to find article body
+  // Try to find article body — check multiple patterns (most specific first)
   let articleContent = '';
   
-  // BBC pattern
-  const bbcMatch = text.match(/<article[^>]*>([\s\S]*?)<\/article>/i);
-  if (bbcMatch) {
-    articleContent = bbcMatch[1];
-  }
+  const contentSelectors = [
+    // Specific article body classes
+    /<div[^>]*class="[^"]*article-body[^"]*"[^>]*>([\s\S]*?)<\/div>\s*<\/div>/i,
+    /<div[^>]*class="[^"]*article-content[^"]*"[^>]*>([\s\S]*?)<\/div>\s*<\/div>/i,
+    /<div[^>]*class="[^"]*story-body[^"]*"[^>]*>([\s\S]*?)<\/div>\s*<\/div>/i,
+    /<div[^>]*class="[^"]*post-content[^"]*"[^>]*>([\s\S]*?)<\/div>\s*<\/div>/i,
+    /<div[^>]*class="[^"]*entry-content[^"]*"[^>]*>([\s\S]*?)<\/div>\s*<\/div>/i,
+    /<div[^>]*class="[^"]*body-content[^"]*"[^>]*>([\s\S]*?)<\/div>\s*<\/div>/i,
+    // Broader article tag
+    /<article[^>]*>([\s\S]*?)<\/article>/i,
+    // WordPress/CMS patterns
+    /<div[^>]*class="[^"]*content-area[^"]*"[^>]*>([\s\S]*?)<\/div>/i,
+    /<div[^>]*class="[^"]*single-content[^"]*"[^>]*>([\s\S]*?)<\/div>/i,
+    /<div[^>]*id="article[^"]*"[^>]*>([\s\S]*?)<\/div>/i,
+    /<main[^>]*>([\s\S]*?)<\/main>/i,
+    // Catch-all content div
+    /<div[^>]*class="[^"]*content[^"]*"[^>]*>([\s\S]*?)<\/div>/i,
+  ];
   
-  // Mirror/tabloid pattern
-  const articleBodyMatch = text.match(/class="article-body[^"]*"[^>]*>([\s\S]*?)<\/div>/i);
-  if (!articleContent && articleBodyMatch) {
-    articleContent = articleBodyMatch[1];
-  }
-  
-  // Generic content patterns
-  const contentMatch = text.match(/<div[^>]*class="[^"]*content[^"]*"[^>]*>([\s\S]*?)<\/div>/i);
-  if (!articleContent && contentMatch) {
-    articleContent = contentMatch[1];
+  for (const selector of contentSelectors) {
+    const match = text.match(selector);
+    if (match && match[1]) {
+      // Check it has actual paragraph content
+      const paraCount = (match[1].match(/<p[\s>]/gi) || []).length;
+      if (paraCount >= 2) {
+        articleContent = match[1];
+        break;
+      }
+    }
   }
 
-  // Fallback to paragraphs
+  // Fallback: extract ALL paragraphs from the page
   if (!articleContent) {
     articleContent = text;
   }
@@ -231,13 +249,13 @@ function extractContent(html) {
     ];
     const isJunk = junkPatterns.some(p => para.toLowerCase().includes(p.toLowerCase()));
     
-    if (para.length > 40 && !isJunk) {
+    if (para.length > 30 && !isJunk) {
       paragraphs.push(para);
     }
   }
 
-  // Limit to reasonable length
-  const result = paragraphs.slice(0, 15).join('\n\n');
+  // Limit to reasonable length (up to 25 paragraphs for longer articles)
+  const result = paragraphs.slice(0, 25).join('\n\n');
   
   return result || 'Content not available. Tap below to read on the original source.';
 }
