@@ -105,7 +105,7 @@ h1,h2,h3,h4{font-family:'Space Grotesk',sans-serif;font-weight:600}
   width:1px;height:50px;background:var(--glass-border);margin:0 18px;flex-shrink:0;
 }
 
-/* ── Agent Cards ── */
+/* ── Agent Cards (legacy grid) ── */
 .agents-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px;margin-bottom:28px}
 .agent-card{position:relative;overflow:hidden}
 .agent-card::before{
@@ -122,6 +122,59 @@ h1,h2,h3,h4{font-family:'Space Grotesk',sans-serif;font-weight:600}
 .agent-metric:last-child{border-bottom:none}
 .agent-metric .lbl{font-size:.78rem;color:var(--text-dim)}
 .agent-metric .val{font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:.92rem}
+
+/* ── Agent Command Center ── */
+.acc-section{margin-bottom:28px}
+.acc-list{display:flex;flex-direction:column;gap:10px}
+.acc-row{
+  display:flex;align-items:center;gap:16px;padding:16px 20px;
+  border-radius:var(--radius);background:var(--glass);
+  border:1px solid var(--glass-border);border-left:4px solid transparent;
+  backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+  transition:border-color .2s, background .2s;flex-wrap:wrap;
+}
+.acc-row:hover{background:rgba(255,255,255,0.03);border-color:rgba(255,255,255,0.1)}
+.acc-row.acc-scout{border-left-color:#14B8A6}
+.acc-row.acc-quill{border-left-color:#A78BFA}
+.acc-row.acc-editor{border-left-color:#34D399}
+.acc-row.acc-promoter{border-left-color:#FF6B6B}
+.acc-row.acc-auditor{border-left-color:#FBBF24}
+
+.acc-left{display:flex;align-items:center;gap:12px;min-width:200px;flex:0 0 auto}
+.acc-left .acc-emoji{font-size:1.5rem;line-height:1}
+.acc-left .acc-info{display:flex;flex-direction:column;gap:2px}
+.acc-left .acc-agent-name{font-family:'Space Grotesk',sans-serif;font-size:.95rem;font-weight:600;color:var(--text)}
+.acc-left .acc-role{font-size:.7rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:.5px}
+
+.acc-middle{display:flex;align-items:center;gap:20px;flex:1 1 auto;min-width:280px}
+.acc-status{display:flex;align-items:center;gap:6px;min-width:80px}
+.acc-status-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+.acc-status-dot.active{background:#34D399;box-shadow:0 0 8px rgba(52,211,153,0.5);animation:pulse-dot 2s infinite}
+.acc-status-dot.idle{background:#FBBF24;box-shadow:0 0 6px rgba(251,191,36,0.3)}
+.acc-status-dot.waiting{background:#64748B}
+.acc-status-label{font-size:.72rem;font-weight:600;font-family:'Space Grotesk',sans-serif;text-transform:uppercase;letter-spacing:.5px}
+.acc-status-label.active{color:#34D399}
+.acc-status-label.idle{color:#FBBF24}
+.acc-status-label.waiting{color:#64748B}
+.acc-detail{display:flex;flex-direction:column;gap:1px}
+.acc-detail-label{font-size:.62rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px}
+.acc-detail-value{font-family:'Space Grotesk',sans-serif;font-size:.82rem;font-weight:500;color:var(--text-dim)}
+.acc-detail-value.highlight{color:var(--text)}
+
+.acc-right{display:flex;align-items:center;gap:20px;flex:0 0 auto;min-width:200px;justify-content:flex-end}
+.acc-next{display:flex;flex-direction:column;align-items:flex-end;gap:1px}
+.acc-next-label{font-size:.62rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px}
+.acc-next-value{font-family:'Space Grotesk',sans-serif;font-size:.85rem;font-weight:600;color:var(--teal)}
+.acc-schedule{display:flex;flex-direction:column;align-items:flex-end;gap:1px}
+.acc-schedule-label{font-size:.62rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px}
+.acc-schedule-value{font-size:.72rem;color:var(--text-dim);font-weight:500}
+
+@media(max-width:900px){
+  .acc-row{flex-direction:column;align-items:flex-start;gap:12px}
+  .acc-left,.acc-middle,.acc-right{min-width:auto;width:100%}
+  .acc-right{justify-content:flex-start}
+  .acc-next,.acc-schedule{align-items:flex-start}
+}
 
 /* ── Stats Bar ── */
 .stats-bar{
@@ -302,31 +355,11 @@ tbody td{padding:10px 12px;vertical-align:middle}
     </div>
   </section>
 
-  <!-- Agent Status Cards -->
-  <section class="agents-grid fade-in fade-in-3">
-    <div class="card agent-card agent-scout" id="agent-scout">
-      <span class="agent-emoji">🔍</span>
-      <div class="agent-name">Scout</div>
-      <div class="agent-metric"><span class="lbl">Last Activity</span><span class="val" id="as-scout-time">—</span></div>
-      <div class="agent-metric"><span class="lbl">Found Today</span><span class="val" id="as-scout-count">—</span></div>
-    </div>
-    <div class="card agent-card agent-quill" id="agent-quill">
-      <span class="agent-emoji">✍️</span>
-      <div class="agent-name">Quill</div>
-      <div class="agent-metric"><span class="lbl">Last Activity</span><span class="val" id="as-quill-time">—</span></div>
-      <div class="agent-metric"><span class="lbl">Summarised Today</span><span class="val" id="as-quill-count">—</span></div>
-    </div>
-    <div class="card agent-card agent-editor" id="agent-editor">
-      <span class="agent-emoji">🛡️</span>
-      <div class="agent-name">Editor</div>
-      <div class="agent-metric"><span class="lbl">Last Activity</span><span class="val" id="as-editor-time">—</span></div>
-      <div class="agent-metric"><span class="lbl">Published / Rejected</span><span class="val" id="as-editor-count">—</span></div>
-    </div>
-    <div class="card agent-card agent-promoter" id="agent-promoter">
-      <span class="agent-emoji">📣</span>
-      <div class="agent-name">Promoter</div>
-      <div class="agent-metric"><span class="lbl">Last Activity</span><span class="val" id="as-promoter-time">—</span></div>
-      <div class="agent-metric"><span class="lbl">Posts Drafted</span><span class="val" id="as-promoter-count">—</span></div>
+  <!-- Agent Command Center -->
+  <section class="card acc-section fade-in fade-in-3">
+    <div class="card-title"><span class="icon">🎛️</span> Agent Command Center</div>
+    <div class="acc-list" id="acc-list">
+      <div class="loading"><div class="loading-spinner"></div>Loading agents…</div>
     </div>
   </section>
 
@@ -560,6 +593,7 @@ function renderPipeline(drafts) {
 }
 
 function renderAgents(logs) {
+  // Legacy agent card rendering — kept for backward compat if elements exist
   const agents = {
     scout: { time: null, count: 0 },
     quill: { time: null, count: 0 },
@@ -591,14 +625,187 @@ function renderAgents(logs) {
       }
     }
   }
-  document.getElementById('as-scout-time').textContent = timeAgo(agents.scout.time);
-  document.getElementById('as-scout-count').textContent = agents.scout.count;
-  document.getElementById('as-quill-time').textContent = timeAgo(agents.quill.time);
-  document.getElementById('as-quill-count').textContent = agents.quill.count;
-  document.getElementById('as-editor-time').textContent = timeAgo(agents.editor.time);
-  document.getElementById('as-editor-count').textContent = `${agents.editor.countPub} / ${agents.editor.countRej}`;
-  document.getElementById('as-promoter-time').textContent = timeAgo(agents.promoter.time);
-  document.getElementById('as-promoter-count').textContent = agents.promoter.count;
+}
+
+// ── Agent Command Center ──
+const ACC_AGENTS = [
+  { key: 'scout',    emoji: '🔍', name: 'Scout',    role: 'Article Hunter',    color: '#14B8A6', schedule: 'Every 2 hours',              match: ['scout'] },
+  { key: 'quill',    emoji: '✍️', name: 'Quill',    role: 'Summariser',        color: '#A78BFA', schedule: 'Every 30 min',               match: ['quill'] },
+  { key: 'editor',   emoji: '🛡️', name: 'Editor',   role: 'Quality Gate',      color: '#34D399', schedule: 'Every 30 min (:15, :45)',    match: ['editor'] },
+  { key: 'promoter', emoji: '📣', name: 'Promoter', role: 'Social Media',      color: '#FF6B6B', schedule: '9am, 1pm, 6pm daily',       match: ['promoter'] },
+  { key: 'auditor',  emoji: '🔎', name: 'Auditor',  role: 'Quality Control',   color: '#FBBF24', schedule: '10am, 10pm daily',           match: ['auditor'] },
+];
+
+function getNextRun(agentKey) {
+  // Compute next run in Europe/London timezone
+  const nowUTC = new Date();
+  // Get current time in UK
+  const ukStr = nowUTC.toLocaleString('en-GB', { timeZone: 'Europe/London', hour12: false });
+  // Parse "DD/MM/YYYY, HH:MM:SS"
+  const parts = ukStr.split(', ');
+  const dateParts = parts[0].split('/');
+  const timeParts = parts[1].split(':');
+  const ukH = parseInt(timeParts[0], 10);
+  const ukM = parseInt(timeParts[1], 10);
+
+  let nextMinutes = null; // minutes from now until next run
+
+  switch (agentKey) {
+    case 'scout': {
+      // Next even hour (0, 2, 4, 6, ...)
+      let nextH = ukH % 2 === 0 ? ukH + 2 : ukH + 1;
+      nextMinutes = (nextH - ukH) * 60 - ukM;
+      if (nextMinutes <= 0) nextMinutes += 120;
+      break;
+    }
+    case 'quill': {
+      // Next :00 or :30
+      if (ukM < 30) nextMinutes = 30 - ukM;
+      else nextMinutes = 60 - ukM;
+      break;
+    }
+    case 'editor': {
+      // Next :15 or :45
+      if (ukM < 15) nextMinutes = 15 - ukM;
+      else if (ukM < 45) nextMinutes = 45 - ukM;
+      else nextMinutes = 75 - ukM; // next hour :15
+      break;
+    }
+    case 'promoter': {
+      // Next 9, 13, 18
+      const slots = [9, 13, 18];
+      let found = false;
+      for (const h of slots) {
+        if (ukH < h || (ukH === h && ukM === 0)) {
+          nextMinutes = (h - ukH) * 60 - ukM;
+          found = true;
+          break;
+        }
+      }
+      if (!found) nextMinutes = (24 - ukH + 9) * 60 - ukM; // tomorrow 9am
+      break;
+    }
+    case 'auditor': {
+      // Next 10 or 22
+      const aSlots = [10, 22];
+      let found = false;
+      for (const h of aSlots) {
+        if (ukH < h || (ukH === h && ukM === 0)) {
+          nextMinutes = (h - ukH) * 60 - ukM;
+          found = true;
+          break;
+        }
+      }
+      if (!found) nextMinutes = (24 - ukH + 10) * 60 - ukM; // tomorrow 10am
+      break;
+    }
+  }
+
+  if (nextMinutes == null || nextMinutes <= 0) nextMinutes = 1;
+  if (nextMinutes < 60) return `in ${nextMinutes}m`;
+  const h = Math.floor(nextMinutes / 60);
+  const m = nextMinutes % 60;
+  return m > 0 ? `in ${h}h ${m}m` : `in ${h}h`;
+}
+
+function renderCommandCenter(logs, todayLogs) {
+  const el = document.getElementById('acc-list');
+  if (!el) return;
+
+  const now = Date.now();
+
+  // Gather per-agent data from logs (ordered desc, so first match = latest)
+  const agentData = {};
+  for (const ag of ACC_AGENTS) {
+    agentData[ag.key] = { lastTime: null, lastAction: null, todayCount: 0 };
+  }
+
+  if (logs) {
+    for (const l of logs) {
+      const a = (l.agent || '').toLowerCase();
+      for (const ag of ACC_AGENTS) {
+        if (ag.match.includes(a)) {
+          const d = agentData[ag.key];
+          if (!d.lastTime) {
+            d.lastTime = l.created_at;
+            d.lastAction = l.action || '—';
+          }
+          break;
+        }
+      }
+    }
+  }
+
+  // Count today's entries from the dedicated today-logs query
+  if (todayLogs) {
+    for (const l of todayLogs) {
+      const a = (l.agent || '').toLowerCase();
+      for (const ag of ACC_AGENTS) {
+        if (ag.match.includes(a)) {
+          agentData[ag.key].todayCount++;
+          break;
+        }
+      }
+    }
+  }
+
+  let html = '';
+  for (const ag of ACC_AGENTS) {
+    const d = agentData[ag.key];
+    // Status
+    let statusClass = 'waiting';
+    let statusLabel = 'Waiting';
+    if (d.lastTime) {
+      const diffMs = now - new Date(d.lastTime).getTime();
+      const diffMin = diffMs / 60000;
+      if (diffMin <= 10) {
+        statusClass = 'active';
+        statusLabel = 'Active';
+      } else {
+        statusClass = 'idle';
+        statusLabel = 'Idle';
+      }
+    }
+
+    const nextRun = getNextRun(ag.key);
+    const lastActivity = d.lastTime ? `${timeAgo(d.lastTime)} — ${escHtml(truncate(d.lastAction, 40))}` : 'No activity yet';
+
+    html += `<div class="acc-row acc-${ag.key}">
+      <div class="acc-left">
+        <span class="acc-emoji">${ag.emoji}</span>
+        <div class="acc-info">
+          <span class="acc-agent-name">${ag.name}</span>
+          <span class="acc-role">${ag.role}</span>
+        </div>
+      </div>
+      <div class="acc-middle">
+        <div class="acc-status">
+          <span class="acc-status-dot ${statusClass}"></span>
+          <span class="acc-status-label ${statusClass}">${statusLabel}</span>
+        </div>
+        <div class="acc-detail">
+          <span class="acc-detail-label">Last Activity</span>
+          <span class="acc-detail-value highlight">${lastActivity}</span>
+        </div>
+        <div class="acc-detail">
+          <span class="acc-detail-label">Processed Today</span>
+          <span class="acc-detail-value highlight">${d.todayCount}</span>
+        </div>
+      </div>
+      <div class="acc-right">
+        <div class="acc-next">
+          <span class="acc-next-label">Next Run</span>
+          <span class="acc-next-value">${nextRun}</span>
+        </div>
+        <div class="acc-schedule">
+          <span class="acc-schedule-label">Schedule</span>
+          <span class="acc-schedule-value">${ag.schedule}</span>
+        </div>
+      </div>
+    </div>`;
+  }
+
+  el.innerHTML = html;
 }
 
 async function renderStats(articles, allDrafts) {
@@ -642,12 +849,14 @@ async function renderStats(articles, allDrafts) {
 // ── Main Refresh ──
 async function refresh() {
   try {
-    const [articlesRes, draftsRes, logsRes, allDraftsRes, socialRes] = await Promise.all([
+    const todayForQuery = todayStart();
+    const [articlesRes, draftsRes, logsRes, allDraftsRes, socialRes, todayLogsRes] = await Promise.all([
       api('/rest/v1/articles?select=*&order=published_at.desc&limit=20'),
       api('/rest/v1/article_drafts?select=*&status=neq.published&order=created_at.desc&limit=30'),
-      api('/rest/v1/agent_log?select=*&order=created_at.desc&limit=50'),
+      api('/rest/v1/agent_log?select=*&order=created_at.desc&limit=100'),
       api('/rest/v1/article_drafts?select=id,status&order=created_at.desc&limit=500'),
       api('/rest/v1/social_posts?select=article_id,platform,status,posted_at&order=posted_at.desc'),
+      api(`/rest/v1/agent_log?select=agent,action,created_at&created_at=gte.${todayForQuery}&order=created_at.desc&limit=500`),
     ]);
 
     renderArticlesTable(articlesRes.data, socialRes.data);
@@ -655,6 +864,7 @@ async function refresh() {
     renderLogFeed(logsRes.data);
     renderPipeline(allDraftsRes.data);
     renderAgents(logsRes.data);
+    renderCommandCenter(logsRes.data, todayLogsRes.data);
     await renderStats(articlesRes.data, allDraftsRes.data);
 
     document.getElementById('last-refresh').textContent = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
