@@ -653,10 +653,10 @@ function renderAgents(logs) {
 // ── Agent Command Center ──
 const ACC_AGENTS = [
   { key: 'scout',    emoji: '🔍', name: 'Scout',    role: 'Article Hunter',    color: '#14B8A6', schedule: 'Every hour',                 match: ['scout','oddly-scout'] },
-  { key: 'quill',    emoji: '✍️', name: 'Quill',    role: 'Summariser',        color: '#A78BFA', schedule: 'Every 20 min',               match: ['quill','oddly-quill'] },
-  { key: 'editor',   emoji: '🛡️', name: 'Editor',   role: 'Quality Gate',      color: '#34D399', schedule: '3× per hour (:10,:30,:50)',  match: ['editor','oddly-editor'] },
+  { key: 'quill',    emoji: '✍️', name: 'Quill',    role: 'Summariser',        color: '#A78BFA', schedule: 'Every 30 min',               match: ['quill','oddly-quill'] },
+  { key: 'editor',   emoji: '🛡️', name: 'Editor',   role: 'Quality Gate',      color: '#34D399', schedule: '2× per hour (:15, :45)',     match: ['editor','oddly-editor'] },
   { key: 'promoter', emoji: '📣', name: 'Promoter', role: 'Social Media',      color: '#FF6B6B', schedule: '9am, 1pm, 6pm daily',       match: ['promoter','oddly-promoter'] },
-  { key: 'auditor',  emoji: '🔎', name: 'Auditor',  role: 'Quality Control',   color: '#FBBF24', schedule: '3× per hour (:05,:25,:45)',  match: ['auditor','oddly-auditor'] },
+  { key: 'auditor',  emoji: '🔎', name: 'Auditor',  role: 'Quality Control',   color: '#FBBF24', schedule: 'Every 2 hours',              match: ['auditor','oddly-auditor'] },
 ];
 
 function getNextRun(agentKey) {
@@ -681,21 +681,16 @@ function getNextRun(agentKey) {
       break;
     }
     case 'quill': {
-      // Every 20 min (:00, :20, :40)
-      const qSlots = [0, 20, 40, 60];
-      for (const s of qSlots) {
-        if (s > ukM) { nextMinutes = s - ukM; break; }
-      }
-      if (!nextMinutes) nextMinutes = 20;
+      // Every 30 min (:00, :30)
+      if (ukM < 30) nextMinutes = 30 - ukM;
+      else nextMinutes = 60 - ukM;
       break;
     }
     case 'editor': {
-      // 3x/hr at :10, :30, :50
-      const eSlots = [10, 30, 50, 70];
-      for (const s of eSlots) {
-        if (s > ukM) { nextMinutes = s - ukM; break; }
-      }
-      if (!nextMinutes) nextMinutes = 20;
+      // 2x/hr at :15, :45
+      if (ukM < 15) nextMinutes = 15 - ukM;
+      else if (ukM < 45) nextMinutes = 45 - ukM;
+      else nextMinutes = 75 - ukM;
       break;
     }
     case 'promoter': {
@@ -713,12 +708,10 @@ function getNextRun(agentKey) {
       break;
     }
     case 'auditor': {
-      // 3x/hr at :05, :25, :45
-      const aSlots = [5, 25, 45, 65];
-      for (const s of aSlots) {
-        if (s > ukM) { nextMinutes = s - ukM; break; }
-      }
-      if (!nextMinutes) nextMinutes = 20;
+      // Every 2 hours at :00
+      let nextH = ukH + (2 - (ukH % 2));
+      nextMinutes = (nextH - ukH) * 60 - ukM;
+      if (nextMinutes <= 0) nextMinutes += 120;
       break;
     }
   }
