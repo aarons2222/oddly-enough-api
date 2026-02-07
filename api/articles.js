@@ -483,6 +483,40 @@ function fixMirrorImage(url) {
   return url.replace('/ALTERNATES/s98/', '/ALTERNATES/s615/');
 }
 
+// Fallback articles served when cache is empty (never make users wait for RSS)
+const FALLBACK_ARTICLES = [
+  {
+    id: 'fallback-1',
+    title: "Scientists Discover New Species That Dances to Attract Mates",
+    summary: "A newly discovered spider performs an elaborate dance routine to woo potential partners.",
+    url: 'https://www.bbc.co.uk/news/science-environment',
+    imageUrl: 'https://dummyimage.com/800x450/FF6B6B/4ECDC4.png&text=🕷️+Dancing+Spider',
+    source: 'Oddly Enough',
+    category: 'animals',
+    publishedAt: new Date().toISOString(),
+  },
+  {
+    id: 'fallback-2',
+    title: "Man Accidentally Buys 1,000 Rubber Ducks, Turns Home Into Tourist Attraction",
+    summary: "A misplaced decimal point led to an unexpected delivery — and a viral sensation.",
+    url: 'https://www.mirror.co.uk/news/weird-news',
+    imageUrl: 'https://dummyimage.com/800x450/FFE66D/FF6B6B.png&text=🦆+1000+Ducks',
+    source: 'Oddly Enough',
+    category: 'viral',
+    publishedAt: new Date().toISOString(),
+  },
+  {
+    id: 'fallback-3',
+    title: "Loading Fresh Weirdness...",
+    summary: "Our news goblins are fetching the latest stories. Pull to refresh in a moment!",
+    url: 'https://oddly-enough.vercel.app',
+    imageUrl: 'https://dummyimage.com/800x450/4ECDC4/FFFFFF.png&text=🛸+Loading...',
+    source: 'Oddly Enough',
+    category: 'viral',
+    publishedAt: new Date().toISOString(),
+  },
+];
+
 // In-memory cache
 let cachedArticles = null;
 let cacheTime = 0;
@@ -526,6 +560,18 @@ async function handler(req, res) {
     } catch (e) {
       console.error('[articles] Redis read failed:', e.message);
     }
+  }
+  
+  // 3. If NOT a refresh request and no cache exists, return fallback immediately
+  //    Never make users wait for RSS fetches — that happens in background via cron
+  if (!refresh) {
+    console.log('[articles] No cache available, returning fallback articles');
+    return res.status(200).json({ 
+      articles: FALLBACK_ARTICLES, 
+      cached: false, 
+      source: 'fallback',
+      message: 'Fresh articles loading in background...',
+    });
   }
   
   // Start with curated articles - also enhance their summaries for consistency
