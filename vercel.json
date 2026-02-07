@@ -10,5 +10,11 @@
       },
       "continue": true
     }
+  ],
+  "crons": [
+    {
+      "path": "/api/cron-refresh?manual=true",
+      "schedule": "0 8 * * *"
+    }
   ]
 }
