@@ -833,10 +833,8 @@ async function handler(req, res) {
         }
       }
       
-      // For sources without thumbnail, use default image
-      if (!imageUrl && DEFAULT_IMAGES[feed.source]) {
-        imageUrl = DEFAULT_IMAGES[feed.source];
-      }
+      // Don't assign default images here — let og:image fetch try first
+      // Default images are used as final fallback after og:image fetch
       
       // Fix BBC image URLs
       if (feed.source.includes('BBC') && imageUrl) {
@@ -1029,6 +1027,17 @@ async function handler(req, res) {
     }));
   }
   
+  // Final fallback: assign default source images for any still missing
+  articles.forEach(a => {
+    if (!a.imageUrl || a.imageUrl.startsWith('placeholder://')) {
+      // Check all feed sources for a default
+      const feed = RSS_FEEDS.find(f => a.source === f.source || a.id.startsWith(f.source.replace(/\s/g, '-')));
+      if (feed && DEFAULT_IMAGES[feed.source]) {
+        a.imageUrl = DEFAULT_IMAGES[feed.source];
+      }
+    }
+  });
+
   // Separate curated and RSS articles
   const curatedIds = CURATED_ARTICLES.map(a => a.id);
   const curated = articles.filter(a => curatedIds.includes(a.id));
