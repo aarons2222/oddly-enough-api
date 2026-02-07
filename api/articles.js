@@ -1038,6 +1038,15 @@ async function handler(req, res) {
     }
   });
 
+  // Quality filter: drop articles with placeholder images AND short summaries
+  // These are unscrappable sites that provide poor UX
+  articles = articles.filter(a => {
+    const hasRealImage = a.imageUrl && !a.imageUrl.startsWith('placeholder://');
+    const hasGoodSummary = a.summary && a.summary.length > 80;
+    // Keep if has real image OR decent summary (not both missing)
+    return hasRealImage || hasGoodSummary;
+  });
+
   // Separate curated and RSS articles
   const curatedIds = CURATED_ARTICLES.map(a => a.id);
   const curated = articles.filter(a => curatedIds.includes(a.id));
