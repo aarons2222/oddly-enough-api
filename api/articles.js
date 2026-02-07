@@ -584,8 +584,8 @@ function generatePlaceholder(title) {
   const index = Math.abs(hash) % GRADIENT_COLORS.length;
   const [color1, color2] = GRADIENT_COLORS[index];
   
-  // Use placeholder.com gradient
-  return `https://placehold.co/800x600/${color1}/${color2}?text=`;
+  // Return marker URL — app renders funky pattern client-side
+  return `placeholder://${color1}/${color2}`;
 }
 
 async function fetchOgImage(url, source) {
