@@ -208,7 +208,16 @@ function extractContent(html) {
     // Clean up UI element cruft that gets mashed in
     para = para
       .replace(/^Comments/i, '')
-      .replace(/View\s*\d+\s*Images?/gi, '')
+      .replace(/View\s*\d*\s*Images?/gi, '')
+      .replace(/^View\s*Image/gi, '')
+      .replace(/Image\s*source[,:]\s*[^\s]*/gi, '')
+      .replace(/Image\s*caption[,:]\s*/gi, '')
+      .replace(/Getty\s*Images?/gi, '')
+      .replace(/PA\s*Media/gi, '')
+      .replace(/Reuters/gi, '')
+      .replace(/\(Image:\s*[^)]*\)/gi, '')
+      .replace(/\(Photo:\s*[^)]*\)/gi, '')
+      .replace(/Credit:\s*[^\n]*/gi, '')
       .replace(/^\s*[,;:.]\s*/, '')
       .trim();
     
@@ -218,7 +227,7 @@ function extractContent(html) {
       'Listen to', 'Watch on', 'Download the', 'Get the app', 'Sign up',
       'Related internet', 'External link', 'Send your story', 'highlights from',
       'Read more:', 'See also:', 'MORE:', 'ALSO READ', 'View gallery',
-      'View images', 'Comments'
+      'View images', 'View image', 'Image source', 'Comments'
     ];
     const isJunk = junkPatterns.some(p => para.toLowerCase().includes(p.toLowerCase()));
     
