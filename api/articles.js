@@ -950,8 +950,8 @@ async function handler(req, res) {
     }
   });
   
-  // Fetch og:image for articles missing images (3s timeout per fetch, max 10 concurrent)
-  const needImages = articles.filter(a => !a.imageUrl).slice(0, 10);
+  // Fetch og:image for articles missing images
+  const needImages = articles.filter(a => !a.imageUrl || a.imageUrl.startsWith('placeholder://'));
   if (needImages.length > 0) {
     await Promise.all(needImages.map(async (article) => {
       try {
@@ -966,7 +966,8 @@ async function handler(req, res) {
           redirect: 'follow',
         });
         clearTimeout(timeout);
-        const html = await resp.text();
+        // Only read first 50KB to find meta tags quickly
+        const html = (await resp.text()).slice(0, 50000);
         
         // Try og:image / twitter:image
         const ogMatch = html.match(/property="og:image"\s+content="([^"]+)"/i)
@@ -983,10 +984,8 @@ async function handler(req, res) {
         for (const match of imgMatches) {
           const src = match[0];
           const url = match[1];
-          // Skip small images, logos, icons, tracking pixels
-          if (/logo|icon|avatar|emoji|gravatar|pixel|badge|button|spinner|loading/i.test(src)) continue;
-          if (/width="[0-9]{1,2}"|height="[0-9]{1,2}"/i.test(src)) continue; // skip tiny
-          // Must be a proper image URL
+          if (/logo|icon|avatar|emoji|gravatar|pixel|badge|button|spinner|loading|alien\.png/i.test(src)) continue;
+          if (/width="[0-9]{1,2}"|height="[0-9]{1,2}"/i.test(src)) continue;
           if (/\.(jpg|jpeg|png|webp)/i.test(url) && url.startsWith('http')) {
             article.imageUrl = url.replace(/&amp;/g, '&');
             return;
