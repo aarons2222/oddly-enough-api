@@ -22,25 +22,40 @@ const REDIS_CACHE_TTL = 60 * 60; // 1 hour in Redis (longer, since we refresh vi
 // Simple delay helper
 const delay = ms => new Promise(r => setTimeout(r, ms));
 
-// Enhance summary with Groq LLM - DISABLED for speed (was causing 30s+ load times)
-async function enhanceSummary(title, summary, source, retries = 2) {
-  // Skip LLM enhancement for now - too slow
-  if (summary && summary.length > 20) {
-    return summary.slice(0, 150) + (summary.length > 150 ? '...' : '');
+// Concurrency limiter for Groq API calls (avoid rate limits)
+let groqQueue = Promise.resolve();
+let groqInFlight = 0;
+const MAX_GROQ_CONCURRENT = 5;
+
+async function withGroqLimit(fn) {
+  while (groqInFlight >= MAX_GROQ_CONCURRENT) {
+    await delay(100);
   }
-  return `${title.slice(0, 100)}${title.length > 100 ? '...' : ''}`;
+  groqInFlight++;
+  try {
+    return await fn();
+  } finally {
+    groqInFlight--;
+  }
+}
+
+// Enhance summary with Groq LLM — runs in background cron only, never blocks users
+async function enhanceSummary(title, summary, source, retries = 2) {
+  if (!GROQ_API_KEY) {
+    return fallbackSummary(title, summary);
+  }
   
-  /* DISABLED - Groq calls were causing 30s+ load times
-  if (!GROQ_API_KEY) return summary || `${title.slice(0, 100)}...`;
-  
-  // Use title if summary is missing or is a generic placeholder
-  const genericPatterns = ['Tap to read', 'unusual story', 'wild Florida Man', 'sounds like satire', 'From r/'];
-  const isGeneric = !summary || summary.length < 15 || genericPatterns.some(p => summary.includes(p));
+  // Use title if summary is missing or generic
+  const genericPatterns = [
+    'Tap to read', 'unusual story', 'wild Florida Man', 'sounds like satire', 
+    'From r/', 'Read the full', 'submitted by', '[link]', 'Read more'
+  ];
+  const isGeneric = !summary || summary.length < 20 || genericPatterns.some(p => summary.includes(p));
   const inputText = isGeneric ? title : summary;
   
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
-      if (attempt > 0) await delay(500 * attempt); // Backoff on retry
+      if (attempt > 0) await delay(500 * attempt);
       
       const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
         method: 'POST',
@@ -49,29 +64,35 @@ async function enhanceSummary(title, summary, source, retries = 2) {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: 'llama-3.1-8b-instant',
+          model: 'llama-3.3-70b-versatile',
           messages: [{
+            role: 'system',
+            content: `You write witty one-line summaries for a weird news app called "Oddly Enough". Your tone is dry British humour — think panel show quips, not clickbait. You're writing for an audience that loves absurd, quirky stories.`
+          }, {
             role: 'user',
-            content: `Write a punchy, engaging one-liner summary for this weird news story. Rules:
-- Max 120 characters
-- No quotes around the text  
-- No clickbait ("you won't believe", "shocking")
-- Be witty but clear
-- Start with the interesting part
+            content: `Write a single punchy summary line for this weird news story.
+
+Rules:
+- One sentence only, max 140 characters
+- No quotes around the text
+- No clickbait phrases ("you won't believe", "shocking", "jaw-dropping")
+- Be genuinely witty — dry humour, wordplay, or absurd observations
+- Lead with the most interesting/weird detail
+- If it's British news, lean into Britishness
 
 Title: ${title}
 Context: ${inputText}
-
-Summary:`
+Source: ${source}`
           }],
-          max_tokens: 80,
-          temperature: 0.7,
+          max_tokens: 100,
+          temperature: 0.8,
         }),
       });
       
       if (response.status === 429) {
         console.log('Groq rate limited, retrying...');
-        continue; // Retry on rate limit
+        await delay(1000);
+        continue;
       }
       
       if (!response.ok) {
@@ -82,18 +103,27 @@ Summary:`
       const data = await response.json();
       const enhanced = data.choices?.[0]?.message?.content?.trim();
       
-      // Return enhanced if valid
-      if (enhanced && enhanced.length > 10 && enhanced.length < 180) {
-        return enhanced.replace(/^["'"]+|["'"]+$/g, '').trim();
+      if (enhanced && enhanced.length > 15 && enhanced.length < 200) {
+        // Clean up any stray quotes or formatting
+        return enhanced
+          .replace(/^["'"]+|["'"]+$/g, '')
+          .replace(/^Summary:\s*/i, '')
+          .replace(/^Here'?s?\s*(a|the|my)\s*/i, '')
+          .trim();
       }
     } catch (e) {
       console.error('Groq enhancement failed:', e.message);
     }
   }
   
-  // All retries failed - generate a simple summary from title
-  return `${title.slice(0, 100)}${title.length > 100 ? '...' : ''}`;
-  */
+  return fallbackSummary(title, summary);
+}
+
+function fallbackSummary(title, summary) {
+  if (summary && summary.length > 20) {
+    return summary.slice(0, 150) + (summary.length > 150 ? '...' : '');
+  }
+  return `${title.slice(0, 120)}${title.length > 120 ? '...' : ''}`;
 }
 
 // REDUCED feed list for faster loading (Vercel has 10s timeout)
@@ -686,8 +716,8 @@ async function handler(req, res) {
         .replace(/\s*[-–]\s*[A-Z][a-z]+(\s+[A-Z][a-z]+)*\s*$/, '') // Remove "- Source Name" at end
         .trim();
       
-      // Enhance summary with Groq LLM (if available)
-      const enhancedSummary = await enhanceSummary(cleanTitle, summary, feed.source);
+      // Enhance summary with Groq LLM (rate-limited, runs in background cron only)
+      const enhancedSummary = await withGroqLimit(() => enhanceSummary(cleanTitle, summary, feed.source));
       
       return {
         id: `${feed.source.replace(/\s/g, '-')}-${now}-${i}`,
